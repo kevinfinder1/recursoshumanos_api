@@ -1,0 +1,47 @@
+.dashboard-container {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #111, #1f1f1f);
+  color: white;
+  padding: 40px;
+  font-family: "Segoe UI", sans-serif;
+}
+
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 40px;
+  border-bottom: 2px solid #dc143c;
+  padding-bottom: 15px;
+}
+
+.dashboard-header h1 {
+  color: #ff1744;
+  font-size: 1.8rem;
+}
+
+.logout-btn {
+  background: #ff1744;
+  border: none;
+  padding: 10px 20px;
+  color: white;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+.logout-btn:hover {
+  background: #dc143c;
+}
+
+.dashboard-content section {
+  background: rgba(255, 255, 255, 0.05);
+  padding: 20px;
+  border-radius: 12px;
+  margin-bottom: 20px;
+  box-shadow: 0 0 15px rgba(0, 0, 0, 0.3);
+}
+
+.dashboard-content h2 {
+  color: #ff5252;
+}
