@@ -1,0 +1,77 @@
+/* src/modules/admin/components/layout/AdminHeader.css */
+.admin-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 25px;
+    background-color: white;
+    border-bottom: 1px solid #e0e0e0;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.header-izquierda {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.btn-menu-hamburguesa {
+    display: none;
+    /* Oculto por defecto */
+    background: none;
+    border: none;
+    font-size: 1.8rem;
+    cursor: pointer;
+    color: #2c3e50;
+    padding: 0 10px;
+}
+
+/* Mostrar el botón solo en pantallas donde el sidebar se colapsa o se oculta */
+@media (max-width: 992px) {
+    .btn-menu-hamburguesa {
+        display: block;
+    }
+}
+
+.header-titulo {
+    margin: 0;
+    color: #2c3e50;
+    font-size: 1.5rem;
+}
+
+.header-derecha {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.usuario-info {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+}
+
+.usuario-nombre {
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+.usuario-rol {
+    font-size: 0.8rem;
+    color: #7f8c8d;
+}
+
+.btn-cerrar-sesion {
+    padding: 8px 16px;
+    background-color: #e74c3c;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background-color 0.3s ease;
+}
+
+.btn-cerrar-sesion:hover {
+    background-color: #c0392b;
+}

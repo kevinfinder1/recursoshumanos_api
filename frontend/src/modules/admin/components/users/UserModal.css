@@ -1,0 +1,163 @@
+/* src/modules/admin/components/users/UserModal.css */
+.modal-usuario {
+    background: white;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 500px;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.modal-header h3 {
+    margin: 0;
+    color: #2c3e50;
+    font-size: 1.2rem;
+}
+
+.btn-cerrar-modal {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: #7f8c8d;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-cerrar-modal:hover {
+    color: #2c3e50;
+}
+
+.formulario-usuario {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.modal-contenido {
+    padding: 20px;
+    flex: 1;
+}
+
+.grupo-formulario {
+    margin-bottom: 20px;
+}
+
+.grupo-doble {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+}
+
+.grupo-formulario label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 600;
+    color: #2c3e50;
+    font-size: 0.9rem;
+}
+
+.grupo-formulario input,
+.grupo-formulario select {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #bdc3c7;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    box-sizing: border-box;
+}
+
+.grupo-formulario input:focus,
+.grupo-formulario select:focus {
+    outline: none;
+    border-color: #3498db;
+}
+
+.input-error {
+    border-color: #e74c3c !important;
+}
+
+.mensaje-error {
+    color: #e74c3c;
+    font-size: 0.8rem;
+    margin-top: 5px;
+    display: block;
+}
+
+.mensaje-exito-modal {
+    background-color: #d4edda;
+    color: #155724;
+    padding: 15px;
+    border-radius: 4px;
+    text-align: center;
+    border: 1px solid #c3e6cb;
+}
+
+.mensaje-info {
+    background-color: #d1ecf1;
+    color: #0c5460;
+    padding: 10px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    border: 1px solid #bee5eb;
+}
+
+.modal-acciones {
+    padding: 20px;
+    border-top: 1px solid #e0e0e0;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.btn-guardar {
+    background-color: #27ae60;
+    color: white;
+}
+
+.btn-guardar:hover {
+    background-color: #219653;
+}
+
+.btn-guardar:disabled {
+    background-color: #95a5a6;
+    cursor: not-allowed;
+}
+
+/* ✅ Estilos para el botón de ver contraseña */
+.input-con-icono {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.input-con-icono input {
+    padding-right: 40px;
+    /* Espacio para el botón */
+}
+
+.btn-icono-input {
+    position: absolute;
+    right: 1px;
+    top: 1px;
+    bottom: 1px;
+    border: none;
+    background: transparent;
+    padding: 0 10px;
+    cursor: pointer;
+    font-size: 1.2rem;
+    color: #7f8c8d;
+}

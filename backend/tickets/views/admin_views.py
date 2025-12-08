@@ -1,75 +1,111 @@
-from rest_framework import viewsets, permissions, filters, decorators, status
+from rest_framework import viewsets, status
+from rest_framework.decorators import action
 from rest_framework.response import Response
-from tickets.models import Ticket, TicketAssignment, TicketHistory
-from tickets.serializers.ticket_serializers import (
-    TicketSerializer,
-    TicketAssignmentSerializer,
-    TicketHistorySerializer
-)
-from users.models import User
+from django.db.models import Count, Q
+from django.utils import timezone
+from datetime import timedelta
 
+from tickets.models import Ticket, TicketAssignment
+from tickets.serializers import TicketSerializer, TicketDetailSerializer
+from tickets.permissions import IsAgenteOrAdmin
 
-class TicketAdminViewSet(viewsets.ModelViewSet):
+class AdminTicketViewSet(viewsets.ModelViewSet):
     """
-    Vista para administradores: pueden ver, filtrar y asignar tickets a agentes.
+    Vista para administradores - Acceso completo a todos los tickets
     """
     serializer_class = TicketSerializer
-    permission_classes = [permissions.IsAdminUser]
-    queryset = Ticket.objects.all().order_by('-fecha_creacion')
+    permission_classes = [IsAgenteOrAdmin]
+    
+    def get_serializer_class(self):
+        if self.action == 'retrieve':
+            return TicketDetailSerializer
+        return super().get_serializer_class()
 
-    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ['titulo', 'descripcion', 'estado', 'categoria_principal', 'subcategoria']
-    ordering_fields = ['fecha_creacion', 'prioridad', 'estado']
+    def get_queryset(self):
+        """Administradores ven todos los tickets"""
+        return Ticket.objects.all().order_by('-fecha_creacion')
 
-    @decorators.action(detail=True, methods=['get'])
-    def historial(self, request, pk=None):
-        """
-        GET /api/admin/tickets/{id}/historial/
-        Retorna el historial completo del ticket.
-        """
-        ticket = self.get_object()
-        historial = TicketHistory.objects.filter(ticket=ticket).order_by('-fecha')
-        serializer = TicketHistorySerializer(historial, many=True)
-        return Response(serializer.data)
-
-    @decorators.action(detail=True, methods=['get'])
-    def asignaciones(self, request, pk=None):
-        """
-        GET /api/admin/tickets/{id}/asignaciones/
-        Retorna las asignaciones registradas del ticket.
-        """
-        ticket = self.get_object()
-        asignaciones = TicketAssignment.objects.filter(ticket=ticket).order_by('-fecha_envio')
-        serializer = TicketAssignmentSerializer(asignaciones, many=True)
-        return Response(serializer.data)
-
-    @decorators.action(detail=True, methods=['patch'])
-    def asignar_agente(self, request, pk=None):
-        """
-        PATCH /api/admin/tickets/{id}/asignar_agente/
-        Permite al admin asignar o reasignar un ticket a un agente.
-        """
-        ticket = self.get_object()
-        agente_id = request.data.get('agente_id')
-
-        try:
-            agente = User.objects.get(id=agente_id, role__startswith='agente')
-        except User.DoesNotExist:
-            return Response(
-                {"error": "El agente especificado no existe o no tiene rol de agente."},
-                status=status.HTTP_400_BAD_REQUEST
+    @action(detail=False, methods=['get'])
+    def estadisticas(self, request):
+        """Obtener estadísticas generales del sistema"""
+        # Estadísticas básicas
+        total_tickets = Ticket.objects.count()
+        tickets_abiertos = Ticket.objects.filter(estado='Abierto').count()
+        tickets_proceso = Ticket.objects.filter(estado='En Proceso').count()
+        tickets_resueltos = Ticket.objects.filter(estado='Resuelto').count()
+        
+        # Tickets por categoría
+        tickets_por_categoria = Ticket.objects.values(
+            'categoria_principal__nombre'
+        ).annotate(
+            total=Count('id')
+        ).order_by('-total')
+        
+        # Tickets vencidos
+        tickets_vencidos = Ticket.objects.filter(esta_vencido=True).count()
+        
+        # Reasignaciones pendientes
+        reasignaciones_pendientes = TicketAssignment.objects.filter(estado='pendiente').count()
+        
+        # Tiempo promedio de resolución (solo tickets cerrados)
+        tickets_cerrados = Ticket.objects.filter(estado='Resuelto', fecha_cierre__isnull=False)
+        tiempo_promedio = None
+        if tickets_cerrados.exists():
+            total_segundos = sum(
+                (ticket.fecha_cierre - ticket.fecha_creacion).total_seconds()
+                for ticket in tickets_cerrados
             )
+            tiempo_promedio_horas = total_segundos / (tickets_cerrados.count() * 3600)
+            tiempo_promedio = round(tiempo_promedio_horas, 1)
+        
+        return Response({
+            "estadisticas_generales": {
+                "total_tickets": total_tickets,
+                "tickets_abiertos": tickets_abiertos,
+                "tickets_en_proceso": tickets_proceso,
+                "tickets_resueltos": tickets_resueltos,
+                "tickets_vencidos": tickets_vencidos,
+                "reasignaciones_pendientes": reasignaciones_pendientes,
+                "tiempo_promedio_resolucion_horas": tiempo_promedio
+            },
+            "tickets_por_categoria": list(tickets_por_categoria),
+        })
 
-        ticket.agente = agente
-        ticket.estado = 'En Proceso'
-        ticket.save(update_fields=['agente', 'estado', 'fecha_actualizacion'])
-
-        # Registrar el cambio en el historial
-        TicketHistory.objects.create(
-            ticket=ticket,
-            usuario=request.user,
-            accion="Asignación de agente",
-            descripcion=f"Ticket asignado a {agente.username} por el administrador {request.user.username}."
-        )
-
-        return Response({"mensaje": f"Ticket asignado a {agente.username} correctamente."})
+    @action(detail=False, methods=['get'])
+    def reporte_agentes(self, request):
+        """Reporte de desempeño por agente"""
+        from users.models import User
+        
+        # ✅ CORRECCIÓN: Usar tipo_base para encontrar a todos los agentes
+        agentes = User.objects.filter(rol__tipo_base='agente')
+        
+        reporte_agentes = []
+        for agente in agentes:
+            # Tickets asignados al agente
+            tickets_asignados = Ticket.objects.filter(agente=agente)
+            tickets_resueltos = tickets_asignados.filter(estado='Resuelto')
+            tickets_vencidos = tickets_asignados.filter(esta_vencido=True)
+            
+            # Calcular tasa de resolución
+            tasa_resolucion = 0
+            if tickets_asignados.exists():
+                tasa_resolucion = (tickets_resueltos.count() / tickets_asignados.count()) * 100
+            
+            # Rating promedio
+            rating_promedio = tickets_resueltos.aggregate(
+                avg_rating=Count('rating')
+            )['avg_rating'] or 0
+            
+            reporte_agentes.append({
+                "agente": agente.username,
+                "role": agente.rol.nombre_visible if agente.rol else 'N/A',
+                "tickets_asignados": tickets_asignados.count(),
+                "tickets_resueltos": tickets_resueltos.count(),
+                "tickets_vencidos": tickets_vencidos.count(),
+                "tasa_resolucion": round(tasa_resolucion, 1),
+                "rating_promedio": rating_promedio
+            })
+        
+        return Response({
+            "reporte_agentes": sorted(reporte_agentes, key=lambda x: x['tasa_resolucion'], reverse=True)
+        })

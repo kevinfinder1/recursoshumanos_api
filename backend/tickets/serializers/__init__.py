@@ -1,12 +1,29 @@
-from .ticket_serializers import TicketSerializer, TicketHistorySerializer
-from .assignment_serializers import TicketAssignmentSerializer, TicketAssignmentUpdateSerializer
-from .message_serializers import TicketMessageSerializer
+from .ticket_serializers import (
+    TicketSerializer,
+    TicketCreateSerializer,
+    TicketDetailSerializer,
+    TicketListSerializer
+)
+from .assignment_serializers import (
+    TicketAssignmentSerializer,
+    TicketAssignmentCreateSerializer
+)
+from .state_serializers import TicketStateUpdateSerializer
+from .history_serializers import TicketHistorySerializer
+from .category_serializers import (
+    CategoriaPrincipalSerializer,
+    SubcategoriaSerializer
+)
 
 __all__ = [
     'TicketSerializer',
-    'TicketAssignmentSerializer', 
-    'TicketAssignmentUpdateSerializer',  # ✅ AGREGAR ESTE
+    'TicketCreateSerializer', 
+    'TicketDetailSerializer',
+    'TicketListSerializer',
+    'TicketAssignmentSerializer',
+    'TicketAssignmentCreateSerializer',
+    'TicketStateUpdateSerializer',
     'TicketHistorySerializer',
-    'TicketMessageSerializer',
-    'TicketMessageCreateSerializer',  # ✅ AGREGAR ESTE
+    'CategoriaPrincipalSerializer',
+    'SubcategoriaSerializer'
 ]

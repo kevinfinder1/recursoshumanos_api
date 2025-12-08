@@ -1,0 +1,363 @@
+/* src/components/NavBar.css */
+
+/* Variables específicas del Navbar. Se asume que las variables globales (--color-texto-principal, etc.) están disponibles. */
+:root {
+    --color-acento-navbar: #dc143c;
+    --color-acento-navbar-hover: #c41230;
+    --color-acento-navbar-fondo-suave: rgba(220, 20, 60, 0.1);
+    --color-acento-navbar-borde-suave: rgba(220, 20, 60, 0.2);
+}
+
+.modern-navbar-v2 {
+    background: var(--color-fondo-tarjeta, #ffffff);
+    border-bottom: 1px solid var(--color-borde, #e0e0e0);
+    box-shadow: var(--sombra-tarjeta, 0 4px 12px rgba(0, 0, 0, 0.08));
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    /* Opcional: para fondos semi-transparentes */
+    /* background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(10px); */
+}
+
+.navbar-container-v2 {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 1rem 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 2rem;
+}
+
+/* ===== LOGO ===== */
+.navbar-logo-v2 {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    transition: transform 0.3s ease;
+    flex-shrink: 0;
+}
+
+.navbar-logo-v2:hover {
+    transform: scale(1.02);
+}
+
+.logo-icon-v2 {
+    width: 40px;
+    height: 40px;
+    background: linear-gradient(135deg, var(--color-acento-navbar), #ff1744);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    box-shadow: 0 4px 12px rgba(220, 20, 60, 0.4);
+}
+
+.logo-icon-v2 svg {
+    width: 24px;
+    height: 24px;
+}
+
+.logo-text-v2 {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.2;
+    text-decoration: none;
+}
+
+.logo-title-v2 {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--color-texto-principal, #2c3e50);
+    letter-spacing: 0.5px;
+}
+
+.logo-subtitle-v2 {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--color-texto-secundario, #7f8c8d);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+/* ===== NAVIGATION LINKS ===== */
+.navbar-links {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+}
+
+.nav-link {
+    padding: 8px 16px;
+    color: var(--color-texto-secundario, #7f8c8d);
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+    position: relative;
+    border: 1px solid transparent;
+}
+
+.nav-link:hover {
+    color: var(--color-texto-principal, #2c3e50);
+    background: var(--color-fondo-pagina, #f4f7f9);
+}
+
+.nav-link.active {
+    color: var(--color-acento-navbar);
+    background: var(--color-acento-navbar-fondo-suave);
+    border-color: var(--color-acento-navbar-borde-suave);
+    font-weight: 600;
+}
+
+.nav-link.active::before {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60%;
+    height: 2px;
+    background: var(--color-acento-navbar);
+}
+
+/* ===== ACCIONES ===== */
+.navbar-actions-v2 {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+/* ===== USUARIO ===== */
+.navbar-user-v2 {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 12px;
+    background: transparent;
+    border-radius: 12px;
+    border: 1px solid transparent;
+    transition: all 0.3s ease;
+}
+
+.navbar-user-v2:hover {
+    background: var(--color-fondo-pagina, #f4f7f9);
+    border-color: var(--color-borde, #e0e0e0);
+}
+
+.user-avatar-v2 {
+    width: 36px;
+    height: 36px;
+    background: linear-gradient(135deg, var(--color-acento-navbar), #ff1744);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: 700;
+    font-size: 14px;
+    box-shadow: 0 2px 8px rgba(220, 20, 60, 0.3);
+}
+
+.user-avatar-v2.large {
+    width: 50px;
+    height: 50px;
+    font-size: 20px;
+}
+
+.user-info-v2 {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.3;
+}
+
+.user-name-v2 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-texto-principal, #2c3e50);
+}
+
+.user-role-v2 {
+    font-size: 12px;
+    color: var(--color-texto-secundario, #7f8c8d);
+    text-transform: capitalize;
+}
+
+/* ===== BOTÓN LOGOUT ===== */
+.btn-logout-v2 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    background: linear-gradient(135deg, var(--color-acento-navbar), var(--color-acento-navbar-hover));
+    border: none;
+    border-radius: 10px;
+    color: white;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 12px rgba(220, 20, 60, 0.3);
+}
+
+.btn-logout-v2:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(220, 20, 60, 0.4);
+}
+
+.btn-logout-v2:active {
+    transform: translateY(0);
+}
+
+.btn-logout-v2 svg {
+    width: 18px;
+    height: 18px;
+}
+
+.btn-logout-v2.mobile {
+    width: 100%;
+    justify-content: center;
+    padding: 14px;
+    margin-top: 20px;
+}
+
+/* ===== MENÚ HAMBURGER ===== */
+.navbar-hamburger-v2 {
+    display: none;
+    background: transparent;
+    border: none;
+    color: var(--color-texto-principal, #2c3e50);
+    cursor: pointer;
+    padding: 8px;
+    transition: all 0.3s ease;
+}
+
+.navbar-hamburger-v2:hover {
+    background: var(--color-fondo-pagina, #f4f7f9);
+    border-radius: 8px;
+}
+
+/* ===== MENÚ MÓVIL ===== */
+.navbar-mobile-menu-v2 {
+    display: none;
+    background: rgba(255, 255, 255, 0.98);
+    backdrop-filter: blur(10px);
+    border-top: 1px solid var(--color-borde, #e0e0e0);
+    padding: 0;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.4s ease-in-out, padding 0.4s ease-in-out;
+}
+
+.navbar-mobile-menu-v2.open {
+    max-height: 600px;
+    padding: 20px;
+}
+
+.mobile-user-card-v2 {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 20px;
+    background: var(--color-fondo-pagina, #f4f7f9);
+    border-radius: 12px;
+    border: 1px solid var(--color-borde, #e0e0e0);
+    margin-bottom: 20px;
+}
+
+.mobile-links {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 20px;
+}
+
+.mobile-link {
+    padding: 12px 16px;
+    color: var(--color-texto-secundario, #7f8c8d);
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+    border: 1px solid transparent;
+}
+
+.mobile-link:hover {
+    color: var(--color-texto-principal, #2c3e50);
+    background: var(--color-fondo-pagina, #f4f7f9);
+}
+
+.mobile-link.active {
+    color: var(--color-acento-navbar);
+    background: var(--color-acento-navbar-fondo-suave);
+    border-color: var(--color-acento-navbar-borde-suave);
+}
+
+.mobile-notifications-v2 {
+    margin-bottom: 16px;
+    display: flex;
+    justify-content: center;
+}
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 1024px) {
+    .navbar-links {
+        gap: 4px;
+    }
+
+    .nav-link {
+        padding: 8px 12px;
+        font-size: 13px;
+    }
+}
+
+@media (max-width: 768px) {
+    .navbar-links {
+        display: none;
+    }
+
+    .navbar-actions-v2 {
+        display: none;
+    }
+
+    .navbar-hamburger-v2 {
+        display: block;
+    }
+
+    .navbar-mobile-menu-v2 {
+        display: block;
+    }
+
+    .logo-title-v2 {
+        font-size: 16px;
+    }
+
+    .logo-icon-v2 {
+        width: 36px;
+        height: 36px;
+    }
+
+    .logo-icon-v2 svg {
+        width: 20px;
+        height: 20px;
+    }
+}
+
+@media (max-width: 480px) {
+    .navbar-container-v2 {
+        padding: 0.75rem 1rem;
+    }
+
+    .logo-subtitle-v2 {
+        display: none;
+    }
+
+    .logo-title-v2 {
+        font-size: 14px;
+    }
+}

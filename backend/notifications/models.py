@@ -16,9 +16,22 @@ class Notification(models.Model):
             ("ticket_creado", "Ticket Creado"),
             ("ticket_asignado", "Ticket Asignado"),
             ("ticket_nuevo_admin", "Nuevo Ticket (Admin)"),
+            ("ticket_actualizado", "Ticket Actualizado"),
+            ("ticket_cerrado", "Ticket Cerrado"),
+            ("ticket_eliminado", "Ticket Eliminado"),
+            ("ticket_reasignado", "Ticket Reasignado"),
             ("sistema", "Sistema"),
         ]
     )
+    # 🔹 Relación opcional con el ticket
+    ticket = models.ForeignKey(
+        "tickets.Ticket",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="notificaciones"
+    )
+
     leida = models.BooleanField(default=False)
     fecha_creacion = models.DateTimeField(auto_now_add=True)
 

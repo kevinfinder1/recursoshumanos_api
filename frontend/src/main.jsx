@@ -1,15 +1,16 @@
-import React from "react";
-import ReactDOM from "react-dom/client";
-import App from "./App";
-import { AuthProvider } from "./context/AuthContext";
-import { BrowserRouter } from "react-router-dom"; // 👈 importa esto
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import { BrowserRouter } from 'react-router-dom'
+import App from './App' // Cambiamos a App
+import { AuthProvider } from './context/AuthContext'
+import { ToastProvider } from './context/ToastContext'
 
-ReactDOM.createRoot(document.getElementById("root")).render(
-  <React.StrictMode>
-    <BrowserRouter> {/* ✅ el router debe envolver al AuthProvider */}
-      <AuthProvider>
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <BrowserRouter>
+    <AuthProvider>
+      <ToastProvider>
         <App />
-      </AuthProvider>
-    </BrowserRouter>
-  </React.StrictMode>
-);
+      </ToastProvider>
+    </AuthProvider>
+  </BrowserRouter>
+)

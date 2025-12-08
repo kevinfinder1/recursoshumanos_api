@@ -10,8 +10,12 @@ def expirar_reasignaciones():
     Reasignaciones no aceptadas en 5 minutos vuelven al agente origen.
     """
     try:
+        # ❌ ELIMINAR ESTA LÍNEA TEMPORAL:
+        # print("✅ Tarea expirar_reasignaciones ejecutándose (modo prueba)")
+        # return "Tarea en modo prueba - migraciones en progreso"
+        
+        # ✅ DEJAR SOLO EL CÓDIGO ORIGINAL:
         now = timezone.now()
-        # Buscar asignaciones pendientes que hayan expirado
         expiradas = TicketAssignment.objects.filter(
             estado="pendiente", 
             fecha_limite_aceptacion__lt=now
@@ -26,15 +30,9 @@ def expirar_reasignaciones():
         
         with transaction.atomic():
             for reasignacion in expiradas:
-                # Actualizar el estado a expirada
                 reasignacion.estado = "expirada"
                 reasignacion.save(update_fields=["estado"])
                 
-                # El método save() del modelo ya se encarga de:
-                # 1. apply_ticket_state() - que devuelve el ticket al agente_origen
-                # 2. Crear el historial automáticamente
-                
-                # Crear notificación para el agente origen
                 Notification.objects.create(
                     usuario=reasignacion.agente_origen,
                     tipo="ticket_asignado",
@@ -50,5 +48,4 @@ def expirar_reasignaciones():
     except Exception as e:
         error_msg = f"❌ Error en expirar_reasignaciones: {str(e)}"
         print(error_msg)
-        # Re-lanza la excepción para que Celery la capture
         raise

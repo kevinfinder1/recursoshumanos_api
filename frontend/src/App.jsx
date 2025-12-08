@@ -1,103 +1,34 @@
 import React from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "./context/AuthContext";
-import LoginPage from "./pages/LoginPage";
-import AdminDashboard from "./pages/AdminDashboard";
-import UsuarioDashboard from "./pages/UsuarioDashboard";
-import AgenteDashboard from "./pages/AgenteDashboard";
-import PrivateRoute from "./routes/PrivateRoute";
-import { ToastContainer } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
-
-// Componente ProtectedRoute
-const ProtectedRoute = ({ children }) => {
-  const { user } = useAuth();
-  const token = localStorage.getItem("access");
-
-  if (!token || !user) {
-    return <Navigate to="/login" replace />;
-  }
-
-  return children;
-};
+import Navbar from "./components/Navbar";
+import AppRouter from "./routes/AppRouter"; // Importamos el nuevo router
+import { NotificationsProvider } from "./context/NotificationsContext"; // 👈 IMPORTANTE
 
 function App() {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, loading } = useAuth();
 
-  // 🔄 Redirigir según el rol del usuario
-  const getDashboardPath = () => {
-    if (!user) return "/login";
-    switch (user.role?.toLowerCase()) {
-      case "admin":
-        return "/admin";
-      case "agente":
-        return "/agente";
-      case "solicitante":
-      case "usuario":
-        return "/usuario";
-      default:
-        return "/login";
-    }
-  };
+  // Si está cargando, mostrar spinner
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-100">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-lg text-gray-700">Inicializando aplicación...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // DEBUG: Verificar estado de autenticación y usuario
+  console.log("APP.JSX | isAuthenticated:", isAuthenticated, "| user:", user);
 
   return (
-    <>
-      <Routes>
-        {/* 🟢 LOGIN */}
-        <Route
-          path="/login"
-          element={
-            isAuthenticated && user ? (
-              <Navigate to={getDashboardPath()} replace />
-            ) : (
-              <LoginPage />
-            )
-          }
-        />
-
-        {/* 🟡 RUTAS PRIVADAS */}
-        <Route
-          path="/usuario"
-          element={
-            <ProtectedRoute>
-              <PrivateRoute allowedRoles={["solicitante", "usuario"]}>
-                <UsuarioDashboard />
-              </PrivateRoute>
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/agente"
-          element={
-            <ProtectedRoute>
-              <PrivateRoute allowedRoles={["agente"]}>
-                <AgenteDashboard />
-              </PrivateRoute>
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/admin"
-          element={
-            <ProtectedRoute>
-              <PrivateRoute allowedRoles={["admin"]}>
-                <AdminDashboard />
-              </PrivateRoute>
-            </ProtectedRoute>
-          }
-        />
-
-        {/* 🔁 Redirección por defecto */}
-        <Route path="/" element={<Navigate to={getDashboardPath()} replace />} />
-
-        {/* 🔒 Captura rutas inexistentes */}
-        <Route path="*" element={<Navigate to="/login" replace />} />
-      </Routes>
-
-      <ToastContainer position="bottom-right" autoClose={2500} theme="colored" />
-    </>
+    <NotificationsProvider>
+      <div className="App">
+        {isAuthenticated && <Navbar />}
+        <AppRouter />
+      </div>
+    </NotificationsProvider>
   );
 }
 

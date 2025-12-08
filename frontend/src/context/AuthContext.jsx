@@ -1,169 +1,229 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import axios from "axios";
-import { useNavigate } from "react-router-dom"; // ✅ importa esto
+import { useNavigate } from "react-router-dom";
 
 const AuthContext = createContext();
 
-export const useAuth = () => useContext(AuthContext);
+export const useAuth = () => {
+    const context = useContext(AuthContext);
+    if (!context) {
+        throw new Error("useAuth debe ser usado dentro de un AuthProvider");
+    }
+    return context;
+};
 
+// API BASE SIN /api (muy importante)
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://192.168.50.68:8000";
+
+/* Almacenamiento seguro */
+const secureStorage = {
+    set: (key, value) => {
+        try {
+            sessionStorage.setItem(key, value);
+        } catch {
+            localStorage.setItem(`secure_${key}`, value);
+        }
+    },
+    get: (key) => {
+        try {
+            return (
+                sessionStorage.getItem(key) ||
+                localStorage.getItem(`secure_${key}`)
+            );
+        } catch {
+            return localStorage.getItem(`secure_${key}`);
+        }
+    },
+    remove: (key) => {
+        sessionStorage.removeItem(key);
+        localStorage.removeItem(`secure_${key}`);
+    },
+};
+
+/* -----------------------------------------
+   🔑 Auth Provider
+------------------------------------------ */
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
-    const navigate = useNavigate(); // ✅ instancia de navegación
+    const [token, setToken] = useState(secureStorage.get("access")); // 🎯 1. Estado para el token
+    const navigate = useNavigate();
 
+    /* -----------------------------------------
+       🚀 Interceptores globales
+    ------------------------------------------ */
+    useEffect(() => {
+        const reqInterceptor = axios.interceptors.request.use(
+            (config) => {
+                const token = secureStorage.get("access");
+                if (token) {
+                    config.headers.Authorization = `Bearer ${token}`;
+                }
+                return config;
+            },
+            (error) => Promise.reject(error)
+        );
+
+        const resInterceptor = axios.interceptors.response.use(
+            (response) => response,
+            async (error) => {
+                if (error.response?.status === 401) {
+                    console.warn("⚠ Token expirado → refrescando...");
+                    const newToken = await refreshAccessToken();
+                    if (!newToken) {
+                        logout();
+                    }
+                }
+                return Promise.reject(error);
+            }
+        );
+
+        return () => {
+            axios.interceptors.request.eject(reqInterceptor);
+            axios.interceptors.response.eject(resInterceptor);
+        };
+    }, []);
+
+    /* -----------------------------------------
+       ⏳ Validar expiración de token
+    ------------------------------------------ */
     const isTokenExpired = (token) => {
         if (!token) return true;
+
         try {
             const payload = JSON.parse(atob(token.split(".")[1]));
-            return Date.now() >= payload.exp * 1000;
+            const buffer = 5 * 60 * 1000; // 5 minutos antes
+            return Date.now() >= payload.exp * 1000 - buffer;
         } catch {
             return true;
         }
     };
 
+    /* -----------------------------------------
+       🔄 Refresh Token
+    ------------------------------------------ */
     const refreshAccessToken = async () => {
-        const refresh = localStorage.getItem("refresh");
+        const refresh = secureStorage.get("refresh");
         if (!refresh) return null;
+
         try {
-            const response = await axios.post("http://localhost:8000/api/token/refresh/", { refresh });
-            const newAccess = response.data.access;
-            localStorage.setItem("access", newAccess);
-            console.log("🔄 Token renovado correctamente");
-            return newAccess;
-        } catch (err) {
-            console.warn("⚠️ Error al refrescar token:", err);
-            logout();
+            const { data } = await axios.post(`${API_BASE_URL}/api/token/refresh/`, { refresh });
+            secureStorage.set("access", data.access);
+            setToken(data.access); // 🎯 2. Actualizar el estado del token
+            return data.access;
+        } catch (error) {
             return null;
         }
     };
 
-    const fetchUserByAccess = async (accessToken) => {
-        const endpoints = [
-            "http://localhost:8000/api/user/me/",
-            "http://localhost:8000/api/users/me/",
-            "http://localhost:8000/api/users/current/",
-            "http://localhost:8000/api/auth/user/"
-        ];
-
-        for (const url of endpoints) {
-            try {
-                const res = await axios.get(url, {
-                    headers: { Authorization: `Bearer ${accessToken}` },
-                });
-                if (res?.data) return res.data;
-            } catch (err) {
-                if (err?.response?.status !== 404) {
-                    console.warn(`⚠️ Error al consultar ${url}:`, err);
-                }
-            }
+    /* -----------------------------------------
+       👤 Obtener datos del usuario logueado
+    ------------------------------------------ */
+    const fetchUser = async () => {
+        try {
+            const { data } = await axios.get(`${API_BASE_URL}/api/user/me/`);
+            return data;
+        } catch {
+            return null;
         }
-        return null;
     };
 
+    /* -----------------------------------------
+       🚀 Inicializar sesión automáticamente
+    ------------------------------------------ */
     useEffect(() => {
-        const initAuth = async () => {
-            const access = localStorage.getItem("access");
-            const refresh = localStorage.getItem("refresh");
+        const init = async () => {
+            const access = secureStorage.get("access");
+            const refresh = secureStorage.get("refresh");
 
             if (!access || !refresh) {
-                console.log("🚫 No hay tokens almacenados");
-                setUser(null);
                 setLoading(false);
                 return;
             }
 
-            let currentAccess = access;
+            let tokenToUse = access;
 
             if (isTokenExpired(access)) {
-                console.log("⏳ Token expirado, intentando renovar...");
-                currentAccess = await refreshAccessToken();
-                if (!currentAccess) {
-                    setUser(null);
+                tokenToUse = await refreshAccessToken();
+                if (!tokenToUse) {
                     setLoading(false);
                     return;
                 }
             }
 
-            try {
-                const userData = await fetchUserByAccess(currentAccess);
-                if (!userData) {
-                    console.warn("⚠️ No se encontró endpoint válido para obtener el usuario");
-                    logout();
-                    setLoading(false);
-                    return;
-                }
+            const userData = await fetchUser();
+            if (userData) {
                 setUser(userData);
-                localStorage.setItem("user", JSON.stringify(userData));
-                console.log("✅ Usuario restaurado:", userData.username);
-            } catch (err) {
-                console.warn("⚠️ Error al cargar usuario:", err);
-                logout();
-            } finally {
-                setLoading(false);
+                setToken(tokenToUse); // 🎯 3. Sincronizar el token en el estado
             }
+
+            setLoading(false);
         };
 
-        initAuth();
+        init();
     }, []);
 
+    /* -----------------------------------------
+       🔐 Login
+    ------------------------------------------ */
     const login = async (username, password) => {
         try {
-            const response = await axios.post("http://localhost:8000/api/token/", {
-                username,
+            const { data } = await axios.post(`${API_BASE_URL}/api/token/`, {
+                username: username.trim(),
                 password,
             });
 
-            const { access, refresh } = response.data;
-            localStorage.setItem("access", access);
-            localStorage.setItem("refresh", refresh);
+            secureStorage.set("access", data.access);
+            secureStorage.set("refresh", data.refresh);
+            setToken(data.access); // 🎯 4. Actualizar el estado del token al hacer login
 
-            const userData = await fetchUserByAccess(access);
-            if (!userData) {
-                console.warn("⚠️ No se pudo obtener datos de usuario tras login");
-                return false;
-            }
+            const userData = await fetchUser();
+            if (!userData) return false;
 
             setUser(userData);
-            localStorage.setItem("user", JSON.stringify(userData));
-
-            console.log("✅ Sesión iniciada como:", userData.username);
             return true;
-        } catch (err) {
-            console.error("❌ Error de login:", err);
+        } catch (error) {
             return false;
         }
     };
 
-    // 🔴 Logout mejorado
+    /* -----------------------------------------
+       🚪 Logout
+    ------------------------------------------ */
     const logout = () => {
-        console.log("🚪 Cerrando sesión...");
-        localStorage.removeItem("access");
-        localStorage.removeItem("refresh");
-        localStorage.removeItem("user");
+        secureStorage.remove("access");
+        secureStorage.remove("refresh");
         setUser(null);
-        navigate("/login", { replace: true }); // ✅ redirige al login inmediatamente
+        setToken(null); // 🎯 5. Limpiar el estado del token al hacer logout
+        navigate("/login", { replace: true });
     };
 
-    const value = {
-        user,
-        setUser,
-        login,
-        logout,
-        isAuthenticated: !!user,
+    /* -----------------------------------------
+       🔐 Permisos por rol
+    ------------------------------------------ */
+    const hasPermission = (required = []) => {
+        if (!user) return false;
+        if (required.length === 0) return true;
+
+        return required.includes(user.role);
     };
 
-    if (loading) {
-        return (
-            <div className="flex justify-center items-center min-h-screen bg-gray-100 text-gray-700">
-                <div className="text-center">
-                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-gray-800 mx-auto mb-3"></div>
-                    <p>Verificando sesión...</p>
-                </div>
-            </div>
-        );
-    }
-
-    return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+    return (
+        <AuthContext.Provider
+            value={{
+                user,
+                setUser,
+                login,
+                logout,
+                isAuthenticated: !!user,
+                token, // 🎯 6. Exponer el token en el contexto
+                loading,
+                hasPermission,
+            }}
+        >
+            {children}
+        </AuthContext.Provider>
+    );
 };
 
 export default AuthContext;

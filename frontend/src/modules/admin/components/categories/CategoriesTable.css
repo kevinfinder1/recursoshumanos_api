@@ -1,0 +1,132 @@
+/* src/modules/admin/components/categories/CategoriesTable.css */
+.contenedor-tabla {
+    background: white;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.tabla-categorias {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.tabla-categorias th {
+    background-color: #34495e;
+    color: white;
+    padding: 15px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.tabla-categorias td {
+    padding: 15px;
+    border-bottom: 1px solid #ecf0f1;
+}
+
+.tabla-categorias tr:hover {
+    background-color: #f8f9fa;
+}
+
+.categoria-inactiva {
+    background-color: #fdf2f2;
+}
+
+.categoria-inactiva:hover {
+    background-color: #fae6e6;
+}
+
+.celda-categoria {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.categoria-nombre {
+    font-weight: 600;
+    color: #2c3e50;
+    font-size: 1rem;
+}
+
+.categoria-descripcion {
+    color: #7f8c8d;
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+
+.cantidad-tickets,
+.cantidad-abiertos {
+    background-color: #ecf0f1;
+    padding: 6px 12px;
+    border-radius: 15px;
+    font-weight: 600;
+    color: #2c3e50;
+    font-size: 0.9rem;
+}
+
+.cantidad-abiertos {
+    background-color: #fff3cd;
+    color: #856404;
+}
+
+.btn-estado {
+    padding: 6px 12px;
+    border: none;
+    border-radius: 15px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.btn-estado.activo {
+    background-color: #27ae60;
+    color: white;
+}
+
+.btn-estado.inactivo {
+    background-color: #95a5a6;
+    color: white;
+}
+
+.contenedor-acciones {
+    display: flex;
+    gap: 5px;
+}
+
+.btn-accion {
+    padding: 6px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background-color 0.3s ease;
+}
+
+.btn-editar {
+    background-color: #3498db;
+    color: white;
+}
+
+.btn-editar:hover {
+    background-color: #2980b9;
+}
+
+.btn-eliminar {
+    background-color: #e74c3c;
+    color: white;
+}
+
+.btn-eliminar:hover {
+    background-color: #c0392b;
+}
+
+.tabla-cargando,
+.tabla-vacia {
+    text-align: center;
+    padding: 40px;
+    background: white;
+    border-radius: 8px;
+    color: #7f8c8d;
+}

@@ -1,0 +1,159 @@
+/* src/modules/admin/components/tickets/AdminTicketsTable.css */
+.contenedor-tabla {
+    background: white;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.tabla-tickets {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.tabla-tickets th {
+    background-color: #34495e;
+    color: white;
+    padding: 12px 15px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.85rem;
+}
+
+.tabla-tickets td {
+    padding: 12px 15px;
+    border-bottom: 1px solid #ecf0f1;
+}
+
+.tabla-tickets tr:hover {
+    background-color: #f8f9fa;
+}
+
+.ticket-id {
+    font-weight: 600;
+    color: #7f8c8d;
+    font-family: monospace;
+}
+
+.celda-titulo {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.ticket-titulo {
+    font-weight: 600;
+    color: #2c3e50;
+    line-height: 1.3;
+}
+
+.ticket-rating {
+    background-color: #fff3cd;
+    color: #856404;
+    padding: 2px 6px;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    align-self: flex-start;
+}
+
+.usuario-info,
+.categoria-info,
+.fecha-info {
+    color: #5d6d7e;
+    font-size: 0.85rem;
+}
+
+.dias-abierto {
+    background-color: #ecf0f1;
+    padding: 4px 8px;
+    border-radius: 10px;
+    font-weight: 600;
+    color: #2c3e50;
+    font-size: 0.8rem;
+}
+
+.badge-estado,
+.badge-prioridad {
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.estado-abierto {
+    background-color: #27ae60;
+    color: white;
+}
+
+.estado-proceso {
+    background-color: #f39c12;
+    color: white;
+}
+
+.estado-resuelto {
+    background-color: #3498db;
+    color: white;
+}
+
+.estado-cerrado {
+    background-color: #95a5a6;
+    color: white;
+}
+
+.prioridad-alta {
+    background-color: #e74c3c !important;
+    color: white;
+}
+
+.prioridad-media {
+    background-color: #f39c12 !important;
+    color: white;
+}
+
+.prioridad-baja {
+    background-color: #27ae60 !important;
+    color: white;
+}
+
+.contenedor-acciones {
+    display: flex;
+    gap: 5px;
+}
+
+.btn-accion {
+    padding: 6px 8px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    transition: background-color 0.3s ease;
+}
+
+.btn-ver {
+    background-color: #3498db;
+    color: white;
+}
+
+.btn-ver:hover {
+    background-color: #2980b9;
+}
+
+.btn-reasignar {
+    background-color: #9b59b6;
+    color: white;
+}
+
+.btn-reasignar:hover {
+    background-color: #8e44ad;
+}
+
+.tabla-cargando,
+.tabla-vacia {
+    text-align: center;
+    padding: 40px;
+    background: white;
+    border-radius: 8px;
+    color: #7f8c8d;
+}

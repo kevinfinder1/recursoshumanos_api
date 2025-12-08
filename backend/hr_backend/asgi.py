@@ -9,15 +9,16 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "hr_backend.settings")
 # 👇 Inicializa Django primero
 django.setup()
 
-# 👇 Ahora sí, importa las rutas WebSocket (ya con las apps cargadas)
+# 👇 SOLO importar notificaciones y chat (tickets no tiene WebSocket)
 from notifications.routing import websocket_urlpatterns as notifications_ws
-from tickets.routing import websocket_urlpatterns as tickets_ws
+from chat.routing import websocket_urlpatterns as chat_ws
+from users.routing import websocket_urlpatterns as users_ws # ✅ 1. Importar rutas de presencia
 
 # Configuración ASGI (HTTP + WebSocket)
 django_asgi_app = get_asgi_application()
 
-# Fusionar las rutas WebSocket de ambas apps
-combined_websocket_urlpatterns = notifications_ws + tickets_ws
+# ✅ 2. Combinar TODAS las rutas de WebSocket
+combined_websocket_urlpatterns = notifications_ws + chat_ws + users_ws
 
 application = ProtocolTypeRouter({
     "http": django_asgi_app,
@@ -25,4 +26,3 @@ application = ProtocolTypeRouter({
         URLRouter(combined_websocket_urlpatterns)
     ),
 })
-

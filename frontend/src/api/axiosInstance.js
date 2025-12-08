@@ -1,16 +1,26 @@
 import axios from "axios";
 
 const API = axios.create({
-  baseURL: "http://localhost:8000/api",
+  baseURL: "http://192.168.50.68:8000/api",
+  headers: {
+    "Content-Type": "application/json",
+  },
 });
 
-// Agrega token a todas las peticiones
-API.interceptors.request.use((config) => {
-  const token = localStorage.getItem("token");
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
+// ♻ Interceptor sincronizado con AuthContext
+API.interceptors.request.use(
+  (config) => {
+    const token =
+      sessionStorage.getItem("access") ||
+      localStorage.getItem("secure_access");
+
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
 
 export default API;

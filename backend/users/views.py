@@ -24,13 +24,26 @@ class CurrentUserView(APIView):
         except Profile.DoesNotExist:
             profile = None
 
+        # --- LÓGICA PARA CONSTRUIR EL ROL CORRECTO ---
+        role_value = None
+        if user.rol:
+            # ✅ CORRECCIÓN: Lógica simplificada y correcta
+            if user.rol.tipo_base == 'agente':
+                role_value = 'agente'
+            elif user.rol.tipo_base == 'solicitante':
+                role_value = 'solicitante'
+            else:
+                # Para cualquier otro caso (como 'admin'), usar el nombre_clave.
+                role_value = user.rol.nombre_clave
+
         return Response({
             "id": user.id,
             "username": user.username,
             "email": user.email,
             "first_name": user.first_name,
             "last_name": user.last_name,
-            "role": user.role,  # ✅ CLAVE: el frontend necesita esto
+            "role": role_value,
+            "rol": user.rol.id if user.rol else None,
             "bio": profile.bio if profile else "",
             "avatar": profile.avatar.url if profile and profile.avatar else None,
         })
@@ -59,7 +72,9 @@ class UserListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        users = User.objects.all().values(
+        # ✅ CORRECCIÓN: Renombrar 'rol__nombre_clave' a 'role' para que el frontend lo entienda.
+        from django.db.models import F
+        users = User.objects.select_related('rol').all().annotate(role=F('rol__nombre_clave')).values(
             "id", "username", "email", "role", "first_name", "last_name"
         )
         return Response(list(users))

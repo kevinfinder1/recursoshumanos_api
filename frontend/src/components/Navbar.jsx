@@ -1,48 +1,296 @@
-import React from "react";
+import React, { useState } from "react";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import NotificacionesPanel from "./NotificacionesPanel";
-import { toast } from "react-toastify";
+import NotificationBell from "./NotificationBell";
+import { useNotificationsContext } from "../context/NotificationsContext";
+import NotificationPanel from "./NotificationPanel";
+import { Menu, X } from "lucide-react";
+import "./Navbar.css";
 
 const Navbar = () => {
-    const { user, logout } = useAuth();
+    const [menuOpen, setMenuOpen] = useState(false);
+    const [openNotifications, setOpenNotifications] = useState(false); // 1. Estado para el panel
+    const { user, logout, isAuthenticated } = useAuth();
+    const { notifications } = useNotificationsContext();
+    const navigate = useNavigate();
+    const location = useLocation();
+
+    const unreadChat = notifications.filter(n => n.tipo === "chat_message" && !n.leida).length;
 
     const handleLogout = () => {
         logout();
-        toast.info("👋 Sesión cerrada correctamente", {
-            position: "bottom-right",
-            autoClose: 3000,
-            theme: "colored",
-        });
+        navigate("/login");
     };
 
+    // 2. Función para abrir/cerrar notificaciones
+    const toggleNotifications = () => {
+        setOpenNotifications((prev) => !prev);
+    };
+
+    // ✅ Asegurarse de que el usuario exista antes de verificar su rol
+    const esAgente = user && (user.role === "admin" || user.role?.startsWith("agente"));
+    const esUsuario = user && user.role === "solicitante";
+
+    // ✅ No renderizar nada si no está autenticado
+    if (!isAuthenticated) return null;
+
+    const isActive = (path) => location.pathname === path;
+
     return (
-        <nav className="bg-gray-900 text-white px-6 py-3 flex items-center justify-between shadow-md">
-            {/* 🏷️ LOGO / TÍTULO */}
-            <div className="text-xl font-bold tracking-wide">
-                HR Ticketing System
-            </div>
+        <>
+            <nav className="modern-navbar-v2">
+                <div className="navbar-container-v2">
+                    {/* 🏷️ LOGO / TÍTULO */}
+                    <div className="navbar-logo-v2">
+                        <div className="logo-icon-v2">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V8l8 5 8-5v10zm-8-7L4 6h16l-8 5z" />
+                            </svg>
+                        </div>
+                        <Link to="/" className="logo-text-v2">
+                            <span className="logo-title-v2">HR Tickets</span>
+                            <span className="logo-subtitle-v2">Sistema de Gestión</span>
+                        </Link>
+                    </div>
 
-            {/* 🔔 SECCIÓN DERECHA */}
-            <div className="flex items-center space-x-4">
-                {/* 📢 Notificaciones */}
-                <NotificacionesPanel />
+                    {/* 🔗 LINKS DE NAVEGACIÓN - DESKTOP */}
+                    <div className="navbar-links">
+                        {esAgente && (
+                            <>
+                                <Link
+                                    to="/agente/tickets"
+                                    className={`nav-link ${isActive('/agente/tickets') ? 'active' : ''}`}
+                                >
+                                    Mis Tickets
+                                </Link>
+                                <Link
+                                    to="/agente/tickets/pendientes"
+                                    className={`nav-link ${isActive('/agente/tickets/pendientes') ? 'active' : ''}`}
+                                >
+                                    Pendientes
+                                </Link>
+                                <Link
+                                    to="/agente/tickets/creados"
+                                    className={`nav-link ${isActive('/agente/tickets/creados') ? 'active' : ''}`}
+                                >
+                                    Mis Creados
+                                </Link>
+                                <Link
+                                    to="/agente/tickets/nuevo"
+                                    className={`nav-link ${isActive('/agente/tickets/nuevo') ? 'active' : ''}`}
+                                >
+                                    Crear Ticket
+                                </Link>
+                                {/* ⭐ BOTÓN CHAT */}
+                                <Link
+                                    to="/agente/chat"
+                                    className={`nav-link ${isActive('/agente/chat') ? 'active' : ''}`}
+                                >
+                                    Chat
+                                    {unreadChat > 0 && (
+                                        <span className="ml-2 bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
+                                            {unreadChat}
+                                        </span>
+                                    )}
+                                </Link>
+                            </>
+                        )}
+                        {esUsuario && (
+                            <>
+                                <Link
+                                    to="/usuario/dashboard"
+                                    className={`nav-link ${isActive('/usuario/dashboard') ? 'active' : ''}`}
+                                >
+                                    Dashboard
+                                </Link>
+                                <Link
+                                    to="/usuario/tickets"
+                                    className={`nav-link ${isActive('/usuario/tickets') ? 'active' : ''}`}
+                                >
+                                    Mis Tickets
+                                </Link>
+                                <Link
+                                    to="/usuario/tickets/nuevo"
+                                    className={`nav-link ${isActive('/usuario/tickets/nuevo') ? 'active' : ''}`}
+                                >
+                                    Crear Ticket
+                                </Link>
+                                {/* ⭐ BOTÓN CHAT */}
+                                <Link
+                                    to="/usuario/chat"
+                                    className={`nav-link ${isActive('/usuario/chat') ? 'active' : ''}`}
+                                >
+                                    Chat
+                                    {unreadChat > 0 && (
+                                        <span className="ml-2 bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
+                                            {unreadChat}
+                                        </span>
+                                    )}
+                                </Link>
+                            </>
+                        )}
+                    </div>
 
-                {/* 👤 Usuario actual */}
-                {user && (
-                    <span className="text-sm text-gray-300">
-                        <strong>{user.username}</strong> ({user.role})
-                    </span>
-                )}
+                    {/* 🔔 SECCIÓN DERECHA - DESKTOP */}
+                    <div className="navbar-actions-v2">
+                        {/* 👤 Usuario actual */}
+                        {user && (
+                            <div className="navbar-user-v2">
+                                <div className="user-avatar-v2">
+                                    {user.username.charAt(0).toUpperCase()}
+                                </div>
+                                <div className="user-info-v2">
+                                    <span className="user-name-v2">{user.username}</span>
+                                    <span className="user-role-v2">{user.role}</span>
+                                </div>
+                            </div>
+                        )}
 
-                {/* 🔒 Cerrar sesión */}
-                <button
-                    onClick={handleLogout}
-                    className="bg-red-600 hover:bg-red-700 px-3 py-1 rounded-lg text-sm font-medium transition-all duration-200"
-                >
-                    Cerrar sesión
-                </button>
-            </div>
-        </nav>
+                        {/* 📢 Notificaciones */}
+                        <NotificationBell onClick={toggleNotifications} />
+
+                        {/* 🔒 Cerrar sesión */}
+                        <button onClick={handleLogout} className="btn-logout-v2">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z" />
+                            </svg>
+                            <span>Cerrar sesión</span>
+                        </button>
+                    </div>
+
+                    {/* 🍔 MENÚ MÓVIL - HAMBURGER */}
+                    <button
+                        className={`navbar-hamburger-v2 ${menuOpen ? 'active' : ''}`}
+                        onClick={() => setMenuOpen(!menuOpen)}
+                    >
+                        {menuOpen ? <X size={24} /> : <Menu size={24} />}
+                    </button>
+                </div>
+
+                {/* 📱 MENÚ MÓVIL DESPLEGABLE */}
+                <div className={`navbar-mobile-menu-v2 ${menuOpen ? 'open' : ''}`}>
+                    {user && (
+                        <div className="mobile-user-card-v2">
+                            <div className="user-avatar-v2 large">
+                                {user.username.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="user-info-v2">
+                                <span className="user-name-v2">{user.username}</span>
+                                <span className="user-role-v2">{user.role}</span>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="mobile-links">
+                        {esAgente && (
+                            <>
+                                <Link
+                                    to="/agente"
+                                    className={`mobile-link ${isActive('/agente') ? 'active' : ''}`}
+                                    onClick={() => setMenuOpen(false)}
+                                >
+                                    Dashboard
+                                </Link>
+                                <Link
+                                    to="/agente/tickets"
+                                    className={`mobile-link ${isActive('/agente/tickets') ? 'active' : ''}`}
+                                    onClick={() => setMenuOpen(false)}
+                                >
+                                    Mis Tickets
+                                </Link>
+                                <Link
+                                    to="/agente/tickets/pendientes"
+                                    className={`mobile-link ${isActive('/agente/tickets/pendientes') ? 'active' : ''}`}
+                                    onClick={() => setMenuOpen(false)}
+                                >
+                                    Pendientes
+                                </Link>
+                                <Link
+                                    to="/agente/tickets/creados"
+                                    className={`mobile-link ${isActive('/agente/tickets/creados') ? 'active' : ''}`}
+                                    onClick={() => setMenuOpen(false)}
+                                >
+                                    Mis Creados
+                                </Link>
+                                <Link
+                                    to="/agente/tickets/nuevo"
+                                    className={`mobile-link ${isActive('/agente/tickets/nuevo') ? 'active' : ''}`}
+                                    onClick={() => setMenuOpen(false)}
+                                >
+                                    Crear Ticket
+                                </Link>
+                                <Link
+                                    to="/agente/chat"
+                                    className={`mobile-link ${isActive('/agente/chat') ? 'active' : ''}`}
+                                    onClick={() => setMenuOpen(false)}
+                                >
+                                    Chat
+                                    {unreadChat > 0 && (
+                                        <span className="ml-2 bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
+                                            {unreadChat}
+                                        </span>
+                                    )}
+                                </Link>
+                            </>
+                        )}
+                        {esUsuario && (
+                            <>
+                                <Link
+                                    to="/usuario/dashboard"
+                                    className={`mobile-link ${isActive('/usuario/dashboard') ? 'active' : ''}`}
+                                    onClick={() => setMenuOpen(false)}
+                                >
+                                    Dashboard
+                                </Link>
+                                <Link
+                                    to="/usuario/tickets"
+                                    className={`mobile-link ${isActive('/usuario/tickets') ? 'active' : ''}`}
+                                    onClick={() => setMenuOpen(false)}
+                                >
+                                    Mis Tickets
+                                </Link>
+                                <Link
+                                    to="/usuario/tickets/nuevo"
+                                    className={`mobile-link ${isActive('/usuario/tickets/nuevo') ? 'active' : ''}`}
+                                    onClick={() => setMenuOpen(false)}
+                                >
+                                    Crear Ticket
+                                </Link>
+                                <Link
+                                    to="/usuario/chat"
+                                    className={`mobile-link ${isActive('/usuario/chat') ? 'active' : ''}`}
+                                    onClick={() => setMenuOpen(false)}
+                                >
+                                    Chat
+                                    {unreadChat > 0 && (
+                                        <span className="ml-2 bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
+                                            {unreadChat}
+                                        </span>
+                                    )}
+                                </Link>
+                            </>
+                        )}
+                    </div>
+
+                    <div className="mobile-notifications-v2">
+                        <NotificationBell onClick={toggleNotifications} />
+                    </div>
+
+                    <button onClick={handleLogout} className="btn-logout-v2 mobile">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z" />
+                        </svg>
+                        <span>Cerrar sesión</span>
+                    </button>
+                </div>
+            </nav>
+
+            {/* 3. Panel de notificaciones (se renderiza fuera del nav) */}
+            <NotificationPanel
+                open={openNotifications}
+                onClose={() => setOpenNotifications(false)}
+            />
+        </>
     );
 };
 

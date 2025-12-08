@@ -1,0 +1,204 @@
+/* src/modules/admin/pages/ReportsPage.css */
+/* NOTA: Se asume que las variables CSS de :root están definidas en un archivo global y son accesibles. */
+
+.pagina-reportes {
+    padding: 0;
+}
+
+.panel-parametros {
+    background: var(--color-fondo-tarjeta);
+    padding: var(--espaciado-grande);
+    border-radius: var(--radio-borde);
+    margin-bottom: var(--espaciado-grande);
+    box-shadow: var(--sombra-tarjeta);
+}
+
+.panel-parametros h3 {
+    margin: 0 0 var(--espaciado-medio) 0;
+    color: var(--color-texto-principal);
+    border-bottom: 1px solid var(--color-borde);
+    padding-bottom: var(--espaciado-pequeno);
+}
+
+.parametros-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: var(--espaciado-medio);
+}
+
+.parametro-grupo {
+    display: flex;
+    flex-direction: column;
+    gap: var(--espaciado-pequeno);
+}
+
+.parametro-grupo label {
+    font-weight: 600;
+    color: var(--color-texto-principal);
+    font-size: 0.9rem;
+}
+
+.select-parametro,
+.input-parametro {
+    padding: var(--espaciado-pequeno);
+    border: 1px solid var(--color-borde);
+    border-radius: var(--radio-borde);
+    font-size: 0.9rem;
+    background-color: var(--color-fondo-tarjeta);
+    transition: var(--transicion-suave);
+}
+
+.select-parametro:focus,
+.input-parametro:focus {
+    outline: none;
+    border-color: var(--color-primario);
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.2);
+}
+
+.lista-reportes {
+    background: var(--color-fondo-tarjeta);
+    padding: var(--espaciado-grande);
+    border-radius: var(--radio-borde);
+    margin-bottom: var(--espaciado-grande);
+    box-shadow: var(--sombra-tarjeta);
+}
+
+.lista-reportes h3 {
+    margin: 0 0 var(--espaciado-medio) 0;
+    color: var(--color-texto-principal);
+    border-bottom: 1px solid var(--color-borde);
+    padding-bottom: var(--espaciado-pequeno);
+}
+
+.grid-reportes {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: var(--espaciado-medio);
+}
+
+.tarjeta-reporte {
+    background: var(--color-fondo-tarjeta);
+    padding: var(--espaciado-medio);
+    border-radius: var(--radio-borde);
+    border-left: 4px solid var(--color-primario);
+    display: flex;
+    flex-direction: column;
+    gap: var(--espaciado-medio);
+    box-shadow: var(--sombra-tarjeta);
+    transition: var(--transicion-suave);
+}
+
+.tarjeta-reporte:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+}
+
+.reporte-info h4 {
+    margin: 0 0 var(--espaciado-pequeno) 0;
+    color: var(--color-texto-principal);
+    font-size: 1.1rem;
+}
+
+.reporte-info p {
+    margin: 0;
+    color: var(--color-texto-secundario);
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+
+.reporte-acciones {
+    display: flex;
+    gap: var(--espaciado-pequeno);
+    flex-wrap: wrap;
+    margin-top: auto;
+    /* Alinea los botones al final de la tarjeta */
+}
+
+.btn-reporte {
+    padding: 10px 18px;
+    border: none;
+    border-radius: var(--radio-borde);
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 600;
+    transition: var(--transicion-suave);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-reporte:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.btn-excel {
+    background-color: var(--color-exito);
+    color: white;
+}
+
+.btn-excel:hover:not(:disabled) {
+    background-color: var(--color-exito-hover);
+    transform: translateY(-2px);
+}
+
+.btn-pdf {
+    background-color: var(--color-error);
+    color: white;
+}
+
+.btn-pdf:hover:not(:disabled) {
+    background-color: #c0392b;
+    transform: translateY(-2px);
+}
+
+.info-reportes {
+    background: var(--color-fondo-tarjeta);
+    padding: var(--espaciado-grande);
+    border-radius: var(--radio-borde);
+    box-shadow: var(--sombra-tarjeta);
+}
+
+.info-reportes h3 {
+    margin: 0 0 var(--espaciado-medio) 0;
+    color: var(--color-texto-principal);
+}
+
+.metricas-lista {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: var(--espaciado-pequeno);
+}
+
+.metrica-item {
+    padding: var(--espaciado-pequeno);
+    background: var(--color-fondo-pagina);
+    border-radius: var(--radio-borde);
+    font-size: 0.9rem;
+    color: var(--color-texto-secundario);
+    border-left: 3px solid var(--color-borde);
+}
+
+.metrica-item strong {
+    color: var(--color-texto-principal);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .parametros-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .grid-reportes {
+        grid-template-columns: 1fr;
+    }
+
+    .reporte-acciones {
+        flex-direction: row;
+    }
+
+    .btn-reporte {
+        justify-content: center;
+    }
+}

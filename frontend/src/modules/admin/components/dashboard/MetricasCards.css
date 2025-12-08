@@ -1,0 +1,107 @@
+/* src/modules/admin/components/dashboard/MetricasCards.css */
+
+.contenedor-metricas {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: var(--espaciado-medio);
+}
+
+.tarjeta-metrica {
+    background-color: var(--color-fondo-tarjeta);
+    border-radius: var(--radio-borde);
+    padding: var(--espaciado-medio);
+    box-shadow: var(--sombra-tarjeta);
+    transition: var(--transicion-suave);
+    border-left: 4px solid;
+    /* El color se definirá por clase */
+}
+
+.tarjeta-metrica:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+}
+
+.tarjeta-contenido {
+    display: flex;
+    align-items: center;
+    gap: var(--espaciado-medio);
+}
+
+.tarjeta-icono {
+    flex-shrink: 0;
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    color: white;
+}
+
+.tarjeta-datos {
+    display: flex;
+    flex-direction: column;
+}
+
+.tarjeta-titulo {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--color-texto-secundario);
+    font-weight: 600;
+}
+
+.tarjeta-valor {
+    margin: 0;
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--color-texto-principal);
+}
+
+/* Colores de las tarjetas */
+.tarjeta-primario {
+    border-color: #3498db;
+}
+
+.tarjeta-primario .tarjeta-icono {
+    background-color: #3498db;
+}
+
+.tarjeta-info {
+    border-color: #1abc9c;
+}
+
+.tarjeta-info .tarjeta-icono {
+    background-color: #1abc9c;
+}
+
+.tarjeta-advertencia {
+    border-color: #f39c12;
+}
+
+.tarjeta-advertencia .tarjeta-icono {
+    background-color: #f39c12;
+}
+
+.tarjeta-proceso {
+    border-color: #9b59b6;
+}
+
+.tarjeta-proceso .tarjeta-icono {
+    background-color: #9b59b6;
+}
+
+.tarjeta-verde {
+    border-color: var(--color-exito);
+}
+
+.tarjeta-verde .tarjeta-icono {
+    background-color: var(--color-exito);
+}
+
+.tarjeta-rojo {
+    border-color: var(--color-error);
+}
+
+.tarjeta-rojo .tarjeta-icono {
+    background-color: var(--color-error);
+}

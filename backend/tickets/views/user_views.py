@@ -1,211 +1,173 @@
-from rest_framework import viewsets, permissions, status
+from rest_framework import viewsets, status
+from rest_framework.decorators import action
 from rest_framework.response import Response
-from django.contrib.auth import get_user_model
-from django.utils.timezone import now
-from datetime import timedelta
-from asgiref.sync import async_to_sync
-from channels.layers import get_channel_layer
+from rest_framework.exceptions import ValidationError
+from django.db.models import Q
+from django.utils import timezone
 
-from tickets.models import Ticket
-from tickets.serializers import TicketSerializer
-from notifications.models import Notification  # ✅ Import agregado correctamente
+from tickets.models import Ticket, TicketHistory
+from tickets.serializers import (   
+    TicketSerializer,
+    TicketCreateSerializer,
+    TicketDetailSerializer
+)
+from tickets.permissions import IsSolicitante, IsTicketOwner
+from tickets.services.notification_service import NotificationService
+from tickets.services.agent_availability_service import AgentAvailabilityService
+from users.models import User
 
-User = get_user_model()
 
-
-class TicketUserViewSet(viewsets.ModelViewSet):
+class UserTicketViewSet(viewsets.ModelViewSet):
     """
-    Vista del usuario solicitante (frontend del usuario normal).
-    Permite:
-      ✅ Crear tickets
-      ✅ Editar (solo en los primeros 5 minutos si sigue abierto)
-      ✅ Eliminar (si no está en proceso)
+    Vista para Solicitantes - Permite a los usuarios con rol de Solicitante gestionar sus propios tickets.
     """
-    queryset = Ticket.objects.all()
     serializer_class = TicketSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsSolicitante, IsTicketOwner]
 
-    # --- CREAR ---
+    # -------------------------------------------
+    # Serializers dinámicos
+    # -------------------------------------------
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return TicketCreateSerializer
+        elif self.action == 'retrieve':
+            return TicketDetailSerializer
+        return TicketSerializer
+
+    # -------------------------------------------
+    # Queryset del usuario autenticado
+    # -------------------------------------------
+    def get_queryset(self):
+        return Ticket.objects.filter(
+            solicitante=self.request.user
+        ).order_by('-fecha_creacion')
+
+    # -------------------------------------------
+    # Crear ticket
+    # -------------------------------------------
     def perform_create(self, serializer):
-        solicitante = self.request.user
-        ticket = serializer.save(solicitante=solicitante)
+        # 1) Validar horario
+        hora_actual = timezone.localtime().time()
+        if hora_actual.hour >= 15:
+            raise ValidationError("❌ No se reciben tickets después de las 3 PM.")
 
-        # --- Asignar primer agente disponible ---
-        agente = User.objects.filter(role="agente").first()
-        if agente:
-            ticket.agente = agente
-            ticket.save()
+        # 2) Crear ticket
+        ticket = serializer.save()
 
-        # --- Crear notificaciones ---
-        try:
-            Notification.objects.create(
-                usuario=solicitante,
-                mensaje=f"🎫 Has creado el ticket '{ticket.titulo}'.",
-                tipo="ticket_creado",
+        categoria = ticket.categoria_principal
+
+        # 3) Buscar agente disponible para esa categoría
+        agente_disponible = AgentAvailabilityService.obtener_agente_disponible(categoria)
+
+        if agente_disponible:
+            # Asignar automáticamente
+            ticket.agente = agente_disponible
+            ticket.save(update_fields=['agente'])
+
+            # Historial
+            TicketHistory.objects.create(
+                ticket=ticket,
+                usuario=self.request.user,
+                accion="Asignación inteligente",
+                descripcion=f"Asignado automáticamente al agente {agente_disponible.username}"
+            )
+            
+            # 🎯 SOLUCIÓN: Notificar solo al agente asignado.
+            NotificationService.notificar_ticket_asignado(ticket)
+        else:
+            # 4) Ningún agente tiene espacio (todos ≥5 tickets)
+            # Ticket queda pendiente de asignación
+            ticket.estado = "Pendiente"
+            ticket.save(update_fields=['estado'])
+
+            # Historial
+            TicketHistory.objects.create(
+                ticket=ticket,
+                usuario=self.request.user,
+                accion="Sin agentes disponibles",
+                descripcion="Todos los agentes están ocupados. El ticket queda en espera de asignación."
             )
 
-            if agente:
-                Notification.objects.create(
-                    usuario=agente,
-                    mensaje=f"🧑‍💼 Se te asignó el ticket '{ticket.titulo}' de {solicitante.username}.",
-                    tipo="ticket_asignado",
-                )
+        # 5) Notificar creación solo a los administradores (ya no a todos los agentes)
+        # La notificación al agente específico se hace arriba si se asigna uno.
+        NotificationService.notificar_ticket_creado(ticket) 
 
-            admin = User.objects.filter(is_superuser=True).first()
-            if admin:
-                Notification.objects.create(
-                    usuario=admin,
-                    mensaje=f"📢 Nuevo ticket '{ticket.titulo}' creado por {solicitante.username}.",
-                    tipo="ticket_nuevo_admin",
-                )
-        except Exception as e:
-            print(f"[ERROR] No se pudieron crear notificaciones: {e}")
-
-        # --- Enviar WebSocket ---
-        try:
-            channel_layer = get_channel_layer()
-
-            async_to_sync(channel_layer.group_send)(
-                f"user_{solicitante.id}",
-                {
-                    "type": "send_notification",
-                    "content": {
-                        "mensaje": f"🎫 Has creado el ticket '{ticket.titulo}'.",
-                        "tipo": "ticket_creado",
-                    },
-                },
-            )
-
-            if agente:
-                async_to_sync(channel_layer.group_send)(
-                    f"user_{agente.id}",
-                    {
-                        "type": "send_notification",
-                        "content": {
-                            "mensaje": f"🧑‍💼 Se te asignó el ticket '{ticket.titulo}' de {solicitante.username}.",
-                            "tipo": "ticket_asignado",
-                        },
-                    },
-                )
-
-            if admin:
-                async_to_sync(channel_layer.group_send)(
-                    f"user_{admin.id}",
-                    {
-                        "type": "send_notification",
-                        "content": {
-                            "mensaje": f"📢 Nuevo ticket '{ticket.titulo}' creado por {solicitante.username}.",
-                            "tipo": "ticket_nuevo_admin",
-                        },
-                    },
-                )
-        except Exception as e:
-            print(f"[ERROR] WebSocket no enviado: {e}")
-
-        return ticket
-
-    # --- EDITAR ---
-    def update(self, request, *args, **kwargs):
+    # -------------------------------------------
+    # Actualizar ticket (solo dentro de tiempo permitido)
+    # -------------------------------------------
+    def perform_update(self, serializer):
         ticket = self.get_object()
 
-        if ticket.solicitante != request.user:
-            return Response(
-                {"error": "🚫 No tienes permiso para editar este ticket."},
-                status=status.HTTP_403_FORBIDDEN,
+        if not ticket.puede_editar:
+            raise ValidationError("⛔ El tiempo de edición ha expirado.")
+
+        # Si el ticket ya está en proceso, no debe cambiar categoría ni título
+        if ticket.estado != "Abierto":
+            incoming = serializer.validated_data
+            bloqueados = ["titulo", "categoria_principal", "subcategoria"]
+
+            for campo in bloqueados:
+                if campo in incoming:
+                    raise ValidationError(
+                        f"⛔ No puedes modificar '{campo}' porque el ticket ya está en proceso."
+                    )
+
+        serializer.save()
+
+        # Notificar al agente que el ticket ha sido actualizado
+        NotificationService.notificar_ticket_actualizado(ticket, self.request.user)
+
+    # -------------------------------------------
+    # Eliminar ticket dentro del tiempo permitido
+    # -------------------------------------------
+    def perform_destroy(self, ticket):
+        if not ticket.puede_eliminar:
+            raise ValidationError("⛔ No puedes eliminar este ticket, el tiempo expiró.")
+        
+        # 🎯 Notificar al agente ANTES de eliminar el ticket
+        if ticket.agente:
+            # ✅ CORRECCIÓN: Usar el servicio para crear la notificación en la BD primero.
+            notification = NotificationService.crear_notificacion_bd(
+                usuario=ticket.agente,
+                mensaje=f"El ticket #{ticket.id} fue eliminado por el solicitante.",
+                tipo="ticket_eliminado",
+                ticket_id=ticket.id
             )
+            if notification:
+                # Luego, enviar la notificación creada por WebSocket.
+                NotificationService.enviar_notificacion_websocket(notification)
+            
+        ticket.delete()
 
-        # Solo editar si han pasado menos de 5 minutos y está "Abierto"
-        tiempo_transcurrido = now() - ticket.fecha_creacion
-        if tiempo_transcurrido > timedelta(minutes=5):
-            return Response(
-                {"error": "⏰ No puedes editar este ticket. El límite de 5 minutos expiró."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if ticket.estado.lower() != "abierto":
-            return Response(
-                {"error": "⚠️ Solo puedes editar tickets en estado 'Abierto'."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        response = super().update(request, *args, **kwargs)
-
-        # --- Notificaciones ---
-        agente = ticket.agente
-        admin = User.objects.filter(is_superuser=True).first()
-        channel_layer = get_channel_layer()
-
-        if agente:
-            async_to_sync(channel_layer.group_send)(
-                f"user_{agente.id}",
-                {
-                    "type": "send_notification",
-                    "content": {
-                        "mensaje": f"✏️ El ticket '{ticket.titulo}' fue editado por {request.user.username}.",
-                        "tipo": "ticket_editado",
-                    },
-                },
-            )
-
-        if admin:
-            async_to_sync(channel_layer.group_send)(
-                f"user_{admin.id}",
-                {
-                    "type": "send_notification",
-                    "content": {
-                        "mensaje": f"✏️ El ticket '{ticket.titulo}' fue editado por {request.user.username}.",
-                        "tipo": "ticket_editado_admin",
-                    },
-                },
-            )
-
-        return response
-
-    # --- ELIMINAR ---
-    def destroy(self, request, *args, **kwargs):
+    # -------------------------------------------
+    # Calificación de ticket resuelto
+    # -------------------------------------------
+    @action(detail=True, methods=['post'])
+    def calificar(self, request, pk=None):
         ticket = self.get_object()
 
-        if ticket.solicitante != request.user:
-            return Response(
-                {"error": "🚫 No tienes permiso para eliminar este ticket."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+        if ticket.estado != 'Resuelto':
+            raise ValidationError("⛔ Solo puedes calificar tickets resueltos.")
 
-        if ticket.estado.lower() == "en proceso":
-            return Response(
-                {"error": "⛔ No puedes eliminar un ticket que ya está en proceso."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        rating = request.data.get('rating')
 
-        titulo = ticket.titulo
-        response = super().destroy(request, *args, **kwargs)
+        try:
+            rating = int(rating)
+        except:
+            raise ValidationError("⛔ El rating debe ser un número entero entre 1 y 5.")
 
-        agente = ticket.agente
-        admin = User.objects.filter(is_superuser=True).first()
-        channel_layer = get_channel_layer()
+        if not (1 <= rating <= 5):
+            raise ValidationError("⛔ El rating debe estar entre 1 y 5.")
 
-        if agente:
-            async_to_sync(channel_layer.group_send)(
-                f"user_{agente.id}",
-                {
-                    "type": "send_notification",
-                    "content": {
-                        "mensaje": f"🗑️ El ticket '{titulo}' fue eliminado por el usuario.",
-                        "tipo": "ticket_eliminado",
-                    },
-                },
-            )
+        ticket.rating = rating
+        ticket.save()
 
-        if admin:
-            async_to_sync(channel_layer.group_send)(
-                f"user_{admin.id}",
-                {
-                    "type": "send_notification",
-                    "content": {
-                        "mensaje": f"🗑️ El ticket '{titulo}' fue eliminado por {request.user.username}.",
-                        "tipo": "ticket_eliminado_admin",
-                    },
-                },
-            )
+        # Registrar historial
+        TicketHistory.objects.create(
+            ticket=ticket,
+            usuario=request.user,
+            accion="Calificación",
+            descripcion=f"Calificado con {rating}/5"
+        )
 
-        return response
+        return Response({"mensaje": "Calificación registrada", "rating": rating})

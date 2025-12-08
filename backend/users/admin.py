@@ -2,7 +2,23 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.forms import UserCreationForm, UserChangeForm
 from django.utils.html import format_html
-from .models import User, Profile
+from .models import User, Profile, Rol, Area # Importar Rol y Area
+
+# Registrar el nuevo modelo Area
+admin.site.register(Area)
+
+# -------------------------------
+# Configuración del admin de Rol
+# -------------------------------
+@admin.register(Rol)
+class RolAdmin(admin.ModelAdmin):
+    list_display = ('nombre_visible', 'nombre_clave', 'tipo_base', 'es_sistema')
+    list_filter = ('tipo_base', 'es_sistema')
+    search_fields = ('nombre_visible', 'nombre_clave')
+    ordering = ('nombre_visible',)
+    fieldsets = (
+        (None, {'fields': ('nombre_visible', 'nombre_clave', 'tipo_base', 'descripcion')}),
+    )
 
 
 # -------------------------------
@@ -12,13 +28,13 @@ from .models import User, Profile
 class CustomUserCreationForm(UserCreationForm):
     class Meta:
         model = User
-        fields = ("username", "email", "role")
+        fields = ("username", "email", "rol")
 
 
 class CustomUserChangeForm(UserChangeForm):
     class Meta:
         model = User
-        fields = ("username", "email", "role", "is_active", "is_staff", "is_superuser")
+        fields = ("username", "email", "rol", "is_active", "is_staff", "is_superuser")
 
 
 # -------------------------------
@@ -55,22 +71,32 @@ class UserAdmin(BaseUserAdmin):
     form = CustomUserChangeForm
     model = User
 
-    list_display = ("username", "email", "role", "is_active", "is_staff", "avatar_preview", "last_login")
-    list_filter = ("role", "is_active", "is_staff")
-    search_fields = ("username", "email")
+    # 1. Añadir nuevos campos a la vista de lista
+    list_display = ("username", "email", "rol", "area", "codigo_empleado", "is_active", "is_staff", "avatar_preview")
+    # 2. Permitir filtrar por área y discapacidad
+    list_filter = ("rol", "area", "is_active", "is_staff", "tiene_discapacidad")
+    # 3. Permitir buscar por los nuevos campos
+    search_fields = ("username", "email", "first_name", "last_name", "numero_documento", "codigo_empleado")
     ordering = ("username",)
 
+    # 4. 'fieldsets' ya está correcto, lo dejamos como está. Controla la vista de EDICIÓN.
     fieldsets = (
         (None, {"fields": ("username", "password")}),
-        ("Información personal", {"fields": ("email", "role")}),
-        ("Permisos", {"fields": ("is_active", "is_staff", "is_superuser", "groups", "user_permissions")}),
+        ("Información Personal", {"fields": ("first_name", "last_name", "email")}),
+        ("Datos de RRHH", {"fields": ("tipo_documento", "numero_documento", "codigo_empleado", "fecha_nacimiento", "area", "tiene_discapacidad", "certificado_discapacidad")}),
+        ("Roles y Permisos", {"fields": ("rol", "is_active", "is_staff", "is_superuser", "groups", "user_permissions")}),
         ("Fechas importantes", {"fields": ("last_login", "date_joined")}),
     )
 
+    # 5. Añadir los nuevos campos al formulario de CREACIÓN.
     add_fieldsets = (
         (None, {
             "classes": ("wide",),
-            "fields": ("username", "email", "role", "password1", "password2", "is_staff", "is_active"),
+            "fields": (
+                "username", "email", "first_name", "last_name", "rol", "area", 
+                "codigo_empleado", "numero_documento",
+                "password1", "password2", "is_staff", "is_active"
+            ),
         }),
     )
 

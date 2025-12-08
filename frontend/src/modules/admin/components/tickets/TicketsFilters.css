@@ -1,0 +1,70 @@
+/* src/modules/admin/components/tickets/TicketsFilters.css */
+.contenedor-filtros-tickets {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.filtros-superiores {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr 1fr auto;
+    gap: 12px;
+    align-items: end;
+}
+
+.filtro-grupo {
+    display: flex;
+    flex-direction: column;
+}
+
+.filtro-grupo label {
+    margin-bottom: 5px;
+    font-weight: 600;
+    color: #2c3e50;
+    font-size: 0.8rem;
+}
+
+.input-busqueda,
+.select-filtro {
+    padding: 8px 10px;
+    border: 1px solid #bdc3c7;
+    border-radius: 4px;
+    font-size: 0.85rem;
+}
+
+.input-busqueda:focus,
+.select-filtro:focus {
+    outline: none;
+    border-color: #3498db;
+}
+
+.btn-limpiar-filtros {
+    padding: 8px 12px;
+    background-color: #95a5a6;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    white-space: nowrap;
+    height: fit-content;
+}
+
+.btn-limpiar-filtros:hover {
+    background-color: #7f8c8d;
+}
+
+/* Responsive */
+@media (max-width: 1200px) {
+    .filtros-superiores {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    .filtros-superiores {
+        grid-template-columns: 1fr;
+    }
+}

@@ -5,3 +5,4 @@ from .consumers import NotificationConsumer
 websocket_urlpatterns = [
     re_path(r"ws/notificaciones/$", NotificationConsumer.as_asgi()),
 ]
+# chat/routing.py

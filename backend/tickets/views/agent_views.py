@@ -1,388 +1,488 @@
-from rest_framework import viewsets, permissions, decorators, status
+from tickets.models.history import TicketHistory
+from rest_framework import viewsets, status
+from rest_framework.decorators import action
 from rest_framework.response import Response
-from django.utils import timezone
-from django.db import transaction
-from django.contrib.auth import get_user_model
-from asgiref.sync import async_to_sync
-from channels.layers import get_channel_layer
 from rest_framework.views import APIView
-from rest_framework.permissions import IsAuthenticated
+from django.utils import timezone 
+from datetime import timedelta
 from django.db.models import Q
-import logging
 
-from tickets.models import Ticket, TicketAssignment, TicketHistory, TicketMessage
-from tickets.serializers import (
-    TicketSerializer,
-    TicketHistorySerializer,
-    TicketMessageSerializer,
-    TicketAssignmentSerializer
-)
-from tickets.serializers.message_serializers import TicketMessageCreateSerializer
+from tickets.models import Ticket, TicketAssignment
+from tickets.serializers import TicketSerializer, TicketDetailSerializer, TicketAssignmentCreateSerializer, TicketStateUpdateSerializer # Importar el nuevo serializer
+from tickets.permissions import IsTicketOwner, CanReassignTicket, CanChangeTicketState, IsAgenteOrAdmin, CanEditTicket, IsAgente
+from tickets.services.assignment_service import AssignmentService
+from tickets.services.state_service import StateService
+from users.models import User
 
-User = get_user_model()
-logger = logging.getLogger(__name__)
-
-# ============================================================
-# 🔔 Función global: Enviar notificaciones por WebSocket
-# ============================================================
-def enviar_notificacion_global(titulo, mensaje, tipo="info", usuario_especifico=None, ticket_id=None):
+class AgentTicketViewSet(viewsets.ModelViewSet):
     """
-    Envía notificaciones a través de WebSocket a un usuario específico o a todos los agentes.
+    Vista para agentes - Ven tickets asignados y pendientes de aceptación
     """
-    try:
-        channel_layer = get_channel_layer()
-        if not channel_layer:
-            logger.warning("❌ Channel layer no disponible")
-            return
-
-        payload = {
-            "type": "send_notification",
-            "content": {
-                "title": titulo,
-                "message": mensaje,
-                "tipo": tipo,
-                "timestamp": str(timezone.now()),
-                "ticket_id": ticket_id,
-            },
-        }
-
-        # Notificación a usuario específico
-        if usuario_especifico:
-            async_to_sync(channel_layer.group_send)(
-                f"user_{usuario_especifico.id}",
-                payload
-            )
-
-        # Notificación a grupo de agentes
-        async_to_sync(channel_layer.group_send)("agentes", payload)
-
-        # Notificación broadcast
-        async_to_sync(channel_layer.group_send)("broadcast", payload)
-
-    except Exception as e:
-        logger.error(f"❌ Error enviando notificaciones: {e}")
-
-# ============================================================
-# 🎯 VISTA PRINCIPAL DEL AGENTE
-# ============================================================
-class TicketAgentViewSet(viewsets.ModelViewSet):
     serializer_class = TicketSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAgenteOrAdmin, IsTicketOwner]
+    
+    def get_serializer_class(self):
+        if self.action == 'cambiar_estado':
+            return TicketStateUpdateSerializer
+        if self.action == 'retrieve':
+            return TicketDetailSerializer
+        # Para la acción de 'update' (PUT/PATCH), usaremos el serializador por defecto (TicketSerializer)
+        # que ya tiene los campos 'titulo' y 'descripcion'.
+        if self.action in ['update', 'partial_update']:
+            self.permission_classes = [IsAgenteOrAdmin, CanEditTicket]
+        return super().get_serializer_class()
 
     def get_queryset(self):
-        """
-        ✅ Muestra los tickets donde el usuario es agente o solicitante.
-        Así el agente que crea un ticket también lo ve en su bandeja.
-        """
+        """Agentes ven tickets asignados a ellos y pendientes de aceptación"""
         user = self.request.user
-        return (
-            Ticket.objects.filter(Q(agente=user) | Q(solicitante=user))
-            .distinct()
-            .order_by("-fecha_actualizacion")
-        )
+        
+        if user.is_authenticated:
+            # ✅ CORRECCIÓN FINAL: El queryset debe incluir también los tickets pendientes de reasignación.
+            # Esto es crucial para que las acciones como 'aceptar_reasignacion' funcionen (evita 404).
+            tickets_pendientes_ids = TicketAssignment.objects.filter(
+                agente_destino=user, estado='pendiente'
+            ).values_list('ticket_id', flat=True)
 
-    def perform_create(self, serializer):
-        agente_asignado = self.request.data.get("agente")
+            return Ticket.objects.filter(
+                Q(agente=user) | 
+                Q(solicitante=user) |
+                Q(id__in=list(tickets_pendientes_ids))
+            ).distinct().order_by('-fecha_actualizacion')
+            
+        # Si no está autenticado, no devolver nada.
+        return Ticket.objects.none()
 
-        with transaction.atomic():
-            ticket = serializer.save(solicitante=self.request.user)
-
-            if agente_asignado:
-                try:
-                    agente_destino = User.objects.get(id=agente_asignado)
-
-                    TicketAssignment.objects.create(
-                        ticket=ticket,
-                        agente_origen=self.request.user,
-                        agente_destino=agente_destino,
-                    )
-
-                    ticket.agente = agente_destino
-                    ticket.estado = "En Proceso"
-                    ticket.save(update_fields=["agente", "estado"])
-
-                    TicketHistory.objects.create(
-                        ticket=ticket,
-                        usuario=self.request.user,
-                        accion="Creación y asignación",
-                        descripcion=f"Ticket asignado a {agente_destino.username}.",
-                    )
-
-                    enviar_notificacion_global(
-                        titulo="🎫 Nuevo Ticket Asignado",
-                        mensaje=f"Se te ha asignado el ticket #{ticket.id}: {ticket.titulo}",
-                        tipo="ticket_creado",
-                        usuario_especifico=agente_destino,
-                        ticket_id=ticket.id,
-                    )
-
-                except User.DoesNotExist:
-                    TicketHistory.objects.create(
-                        ticket=ticket,
-                        usuario=self.request.user,
-                        accion="Creación sin asignación",
-                        descripcion="No se pudo asignar el ticket a ningún agente.",
-                    )
-            else:
-                TicketHistory.objects.create(
-                    ticket=ticket,
-                    usuario=self.request.user,
-                    accion="Creación de ticket",
-                    descripcion="Ticket creado sin asignación inicial.",
-                )
-
-    @decorators.action(detail=True, methods=["get"])
-    def detalle(self, request, pk=None):
+    @action(detail=True, methods=['get'])
+    def messages(self, request, pk=None):
+        """Devuelve los mensajes de chat de un ticket específico."""
         ticket = self.get_object()
-        historial = TicketHistory.objects.filter(ticket=ticket).order_by("-fecha")
-        historial_serializer = TicketHistorySerializer(historial, many=True)
-        ticket_serializer = TicketSerializer(ticket)
-        return Response({
-            "ticket": ticket_serializer.data,
-            "historial": historial_serializer.data
-        })
+        if not hasattr(ticket, 'chat_room'):
+            return Response({"results": [], "count": 0})
 
-    @decorators.action(detail=True, methods=["post"])
-    def reasignar_ticket(self, request, pk=None):
-        ticket = self.get_object()
-        nuevo_agente_id = request.data.get("nuevo_agente")
+        messages = ticket.chat_room.messages.order_by('timestamp')
+        # Usar el serializer de mensajes de la app de chat
+        from chat.serializers import MessageSerializer
+        serializer = MessageSerializer(messages, many=True, context={'request': request})
+        return Response({"results": serializer.data, "count": messages.count()})
 
-        if not nuevo_agente_id:
-            return Response({"error": "Debes especificar el ID del nuevo agente."}, status=400)
+    @action(detail=False, methods=['get'], url_path='mis-tickets-creados')
+    def mis_tickets_creados(self, request):
+        """Devuelve los tickets creados por el agente actual."""
+        user = request.user
+        queryset = Ticket.objects.filter(solicitante=user).order_by('-fecha_actualizacion')
+        
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
 
-        try:
-            nuevo_agente = User.objects.get(id=nuevo_agente_id)
-        except User.DoesNotExist:
-            return Response({"error": "El agente especificado no existe."}, status=404)
-
-        with transaction.atomic():
-            TicketAssignment.objects.create(
-                ticket=ticket,
-                agente_origen=request.user,
-                agente_destino=nuevo_agente,
-            )
-
-            ticket.agente = nuevo_agente
-            ticket.save(update_fields=["agente"])
-
-            TicketHistory.objects.create(
-                ticket=ticket,
-                usuario=request.user,
-                accion="Reasignación de ticket",
-                descripcion=f"Ticket reasignado a {nuevo_agente.username}.",
-            )
-
-            enviar_notificacion_global(
-                titulo="🔁 Ticket Reasignado",
-                mensaje=f"Ahora eres responsable del ticket #{ticket.id}: {ticket.titulo}.",
-                tipo="ticket_asignado",
-                usuario_especifico=nuevo_agente,
-                ticket_id=ticket.id,
-            )
-
-        serializer = TicketAssignmentSerializer(ticket)
-        return Response({
-            "mensaje": f"Ticket reasignado correctamente a {nuevo_agente.username}.",
-            "asignacion": serializer.data
-        }, status=status.HTTP_200_OK)
-
-    @decorators.action(detail=True, methods=["get"])
-    def historial(self, request, pk=None):
-        ticket = self.get_object()
-        historial = TicketHistory.objects.filter(ticket=ticket).order_by("-fecha")
-        serializer = TicketHistorySerializer(historial, many=True)
+        serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
 
-    # ============================================================
-    # 🗑️ ELIMINAR TICKET
-    # ============================================================
-    @decorators.action(detail=True, methods=["delete"], url_path="eliminar_ticket")
-    def eliminar_ticket(self, request, pk=None):
-        """
-        🔒 Permite eliminar un ticket solo si el usuario es su solicitante.
-        Envía una notificación al agente asignado.
-        """
-        try:
-            ticket = Ticket.objects.get(pk=pk)
-        except Ticket.DoesNotExist:
-            return Response({"error": "Ticket no encontrado."}, status=status.HTTP_404_NOT_FOUND)
+    @action(detail=False, methods=['get'], url_path='tickets-asignados-a-mi')
+    def tickets_asignados_a_mi(self, request):
+        """Devuelve los tickets asignados directamente al agente actual."""
+        user = request.user
+        queryset = Ticket.objects.filter(agente=user).order_by('-fecha_actualizacion')
 
-        # Solo el solicitante puede borrar su propio ticket
-        if ticket.solicitante != request.user:
-            return Response({"error": "No tienes permiso para eliminar este ticket."}, status=status.HTTP_403_FORBIDDEN)
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
 
-        ticket_id = ticket.id
-        titulo = ticket.titulo
-        agente = ticket.agente
-        solicitante = ticket.solicitante
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
 
-        ticket.delete()
+    @action(detail=True, methods=['post'])
+    def reasignar(self, request, pk=None):
+        """Reasignar ticket a otro agente"""
+        ticket = self.get_object()
 
-        # 🔔 Notificar vía WebSocket
-        channel_layer = get_channel_layer()
-        notification_data = {
-            "type": "enviar_notificacion",
-            "content": {
-                "type": "notification",
-                "message": f"🗑️ El ticket #{ticket_id} ('{titulo}') fue eliminado por {solicitante.username}.",
-                "ticket_id": ticket_id,
-                "accion": "ticket_eliminado",
-            },
-        }
-
-        if agente:
-            async_to_sync(channel_layer.group_send)(f"user_{agente.id}", notification_data)
-        async_to_sync(channel_layer.group_send)(f"user_{solicitante.id}", notification_data)
-
-        return Response(
-            {"mensaje": f"Ticket #{ticket_id} eliminado correctamente."},
-            status=status.HTTP_200_OK
+        # 🎯 Usar el serializador para validar los datos de entrada
+        serializer = TicketAssignmentCreateSerializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        
+        validated_data = serializer.validated_data
+        agente_destino = validated_data.get('agente_destino')
+        tiempo_aceptacion = validated_data.get('tiempo_aceptacion', 300)
+        
+        resultado = AssignmentService.reasignar_ticket(
+            ticket, request.user, agente_destino, tiempo_aceptacion
         )
+        
+        return Response(resultado) if 'error' not in resultado else Response(resultado, status=status.HTTP_400_BAD_REQUEST)
 
-# ============================================================
-# 🆕 CAMBIAR ESTADO DE TICKET
-# ============================================================
-class CambiarEstadoTicketView(APIView):
-    permission_classes = [IsAuthenticated]
+    @action(detail=True, methods=['post'], permission_classes=[IsAgente])
+    def aceptar_reasignacion(self, request, pk=None):
+        """Aceptar reasignación pendiente"""
+        ticket = self.get_object()
+        resultado = AssignmentService.aceptar_reasignacion(ticket, request.user)
 
-    def post(self, request, pk=None):
+        if 'error' in resultado:
+            # Si es un error de permiso, el servicio debería incluirlo. Usamos 403 si es el caso.
+            status_code = status.HTTP_403_FORBIDDEN if "permiso" in resultado.get('error', '').lower() else status.HTTP_400_BAD_REQUEST
+            return Response(resultado, status=status_code)
+            
+        return Response(resultado)
+
+    @action(detail=True, methods=['post'], permission_classes=[IsAgente])
+    def rechazar_reasignacion(self, request, pk=None):
+        """Rechazar reasignación pendiente"""
+        ticket = self.get_object()
+        # 🎯 SOLUCIÓN: Se anulan los permisos a nivel de vista.
+        # La lógica de negocio dentro de AssignmentService se encargará de verificar
+        # si este agente es el destinatario de la reasignación.
+        
+        resultado = AssignmentService.rechazar_reasignacion(ticket, request.user)
+        
+        if 'error' in resultado:
+            return Response(resultado, status=status.HTTP_400_BAD_REQUEST)
+            
+        return Response(resultado)
+
+    @action(detail=True, methods=['post'])
+    def cambiar_estado(self, request, pk=None):
+        """Cambiar estado del ticket"""
+        ticket = self.get_object()
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        nuevo_estado = serializer.validated_data['estado']
+        
+        # 🎯 SOLUCIÓN: Asegurarnos de que la acción quede en el historial ANTES de cambiar el estado.
+        # Esto garantiza que el agente siempre tendrá permiso para ver el ticket después.
+        TicketHistory.objects.create(
+            ticket=ticket,
+            usuario=request.user,
+            accion=f"Cambio de estado a '{nuevo_estado}'"
+        )
+        
+        resultado = StateService.cambiar_estado(ticket, nuevo_estado, request.user)
+        
+        if 'error' in resultado:
+            return Response(resultado, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Devolver el ticket actualizado para que el frontend pueda refrescar su estado.
+        # Esto es crucial para la actualización en tiempo real de la UI.
+        ticket.refresh_from_db() # Recargamos el objeto desde la BD
+        serializer = TicketDetailSerializer(ticket) # Usamos el serializer de detalle
+        
+        # Añadimos el ticket serializado a la respuesta
+        resultado['ticket'] = serializer.data 
+        return Response(resultado)
+
+    @action(detail=False, methods=['post'], url_path='crear-rapido')
+    def crear_ticket_rapido(self, request):
+        """Endpoint alternativo que evita todos los problemas"""
         try:
-            ticket = Ticket.objects.get(id=pk, agente=request.user)
-        except Ticket.DoesNotExist:
-            return Response({"error": "Ticket no encontrado o no tienes permisos."}, status=404)
+            print("🚀 CREAR TICKET RÁPIDO - Iniciando...")
+            
+            # Obtener datos
+            titulo = request.data.get('titulo')
+            descripcion = request.data.get('descripcion') 
+            prioridad = request.data.get('prioridad', 'Media')
+            agente_destino_id = request.data.get('agente_destino')
+            
+            print(f"📦 Datos recibidos: {request.data}")
+            
+            if not titulo or not descripcion or not agente_destino_id:
+                return Response({
+                    'error': 'Faltan campos requeridos: titulo, descripcion, agente_destino'
+                }, status=400)
+    
+            # Verificar que el agente existe
+            from users.models import User
+            try:
+                agente_destino = User.objects.get(
+                    id=agente_destino_id, rol__tipo_base__in=["agente", "admin"]
+                )
+                print(f"✅ Agente encontrado: {agente_destino.username}")
+            except User.DoesNotExist:
+                return Response({'error': 'Agente no encontrado'}, status=400)
+    
+            # 🎯 CREAR TICKET MANUALMENTE
+            from tickets.models import Ticket
+            from django.utils import timezone
+            
+            ticket = Ticket(
+                titulo=titulo,
+                descripcion=descripcion,
+                prioridad=prioridad,
+                solicitante=request.user,
+                estado='Abierto',
+                fecha_creacion=timezone.now(),
+                fecha_actualizacion=timezone.now()
+            )
+            
+            # Guardar sin procesar signals complejos
+            ticket.save()
+            print(f"✅ Ticket creado: {ticket.id}")
+    
+            # 🎯 USAR EL SERVICIO PARA ASIGNAR EL TICKET
+            # Centralizamos la lógica en el AssignmentService
+            from tickets.services.assignment_service import AssignmentService
+            resultado_asignacion = AssignmentService.asignar_ticket_de_agente(ticket, agente_destino)
+            print(f"⚙️ Resultado de la asignación: {resultado_asignacion}")
+    
+            # 🎯 RECARGAR EL OBJETO DESDE LA BD
+            # Esto es CRUCIAL para que el serializer tenga los datos completos (agente_info, etc.)
+            ticket.refresh_from_db()
 
-        nuevo_estado = request.data.get("estado")
-        if nuevo_estado not in dict(Ticket.ESTADO_CHOICES):
-            return Response({"error": "Estado inválido."}, status=400)
+            # Devolver el ticket creado
+            from tickets.serializers import TicketSerializer
+            serializer = TicketSerializer(ticket)
+            
+            return Response({
+                'success': True,
+                'ticket': serializer.data,
+                'message': 'Ticket creado exitosamente'
+            })
+    
+        except Exception as e:
+            print(f"❌ ERROR en crear_ticket_rapido: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return Response({'error': str(e)}, status=500)
 
-        with transaction.atomic():
-            estado_anterior = ticket.estado
-            ticket.estado = nuevo_estado
-            ticket.save(update_fields=["estado", "fecha_actualizacion"])
+    @action(detail=True, methods=['post'])
+    def cerrar(self, request, pk=None):
+        """Cerrar ticket con comentario"""
+        ticket = self.get_object()
+        comentario = request.data.get('comentario', '')
+        rating = request.data.get('rating')
+        
+        resultado = StateService.cerrar_ticket(ticket, request.user, comentario, rating)
+        
+        if 'error' in resultado:
+            return Response(resultado, status=status.HTTP_400_BAD_REQUEST)
+            
+        return Response(resultado)
 
-            TicketHistory.objects.create(
-                ticket=ticket,
-                usuario=request.user,
-                accion="Cambio de Estado",
-                descripcion=f"Estado cambiado de '{estado_anterior}' a '{nuevo_estado}'"
+    @action(detail=False, methods=['get'])
+    def pendientes_aceptacion(self, request):
+        """Obtener tickets pendientes de aceptación"""
+        asignaciones_pendientes = AssignmentService.obtener_asignaciones_pendientes(request.user)
+        
+        from tickets.serializers import TicketSerializer, TicketAssignmentSerializer
+        
+        tickets_pendientes = [asignacion.ticket for asignacion in asignaciones_pendientes]
+        tickets_serializer = TicketSerializer(tickets_pendientes, many=True)
+        asignaciones_serializer = TicketAssignmentSerializer(asignaciones_pendientes, many=True)
+        
+        return Response({
+            "count": len(tickets_pendientes),
+            "tickets": tickets_serializer.data,
+            "asignaciones": asignaciones_serializer.data
+        })
+
+    @action(detail=False, methods=['get'], url_path='debug-tickets')
+    def debug_tickets(self, request):
+        """Ver todos los tickets para debug"""
+        from tickets.models import Ticket
+        from tickets.serializers import TicketSerializer
+        
+        print(f"🔍 DEBUG - Usuario actual: {request.user.username} (ID: {request.user.id})")
+        print(f"🔍 DEBUG - Rol usuario: {request.user.rol.nombre_clave if request.user.rol else 'Sin rol'}")
+        
+        # Todos los tickets recientes
+        todos_tickets = Ticket.objects.all().order_by('-id')[:5]
+        print(f"🔍 DEBUG - Total tickets en BD: {Ticket.objects.count()}")
+        
+        # Tickets del usuario actual como agente
+        mis_tickets = Ticket.objects.filter(agente=request.user)
+        print(f"🔍 DEBUG - Tickets donde soy agente: {mis_tickets.count()}")
+        
+        # Tickets pendientes de aceptación
+        from tickets.models import TicketAssignment
+        asignaciones_pendientes = TicketAssignment.objects.filter(
+            agente_destino=request.user, 
+            estado='pendiente'
+        )
+        print(f"🔍 DEBUG - Asignaciones pendientes: {asignaciones_pendientes.count()}")
+        
+        # Tickets según el queryset normal
+        queryset_normal = self.get_queryset()
+        print(f"🔍 DEBUG - Queryset normal: {queryset_normal.count()} tickets")
+        
+        return Response({
+            'usuario_actual': {
+                'id': request.user.id,
+                'username': request.user.username,
+                'role': request.user.rol.nombre_clave if request.user.rol else 'Sin rol'
+            },
+            'estadisticas': {
+                'total_tickets_bd': Ticket.objects.count(),
+                'mis_tickets': mis_tickets.count(),
+                'asignaciones_pendientes': asignaciones_pendientes.count(),
+                'queryset_normal': queryset_normal.count()
+            },
+            'todos_tickets': TicketSerializer(todos_tickets, many=True).data,
+            'mis_tickets_lista': TicketSerializer(mis_tickets, many=True).data,
+            'asignaciones_pendientes_lista': [
+                {
+                    'id': a.id,
+                    'ticket_id': a.ticket.id,
+                    'ticket_titulo': a.ticket.titulo,
+                    'agente_origen': a.agente_origen.username,
+                    'estado': a.estado
+                } for a in asignaciones_pendientes
+            ],
+            'queryset_normal_lista': TicketSerializer(queryset_normal, many=True).data
+        })
+
+    @action(detail=True, methods=['post'], url_path='add_comment')
+    def add_comment(self, request, pk=None):
+        """
+        Permite a un agente añadir un comentario a un ticket.
+        Esto crea un registro en el historial del ticket.
+        """
+        ticket = self.get_object()
+        descripcion = request.data.get('descripcion')
+
+        if not descripcion:
+            return Response(
+                {'error': 'El campo "descripcion" no puede estar vacío.'},
+                status=status.HTTP_400_BAD_REQUEST
             )
 
-            if nuevo_estado in ["En Proceso", "Resuelto"]:
-                enviar_notificacion_global(
-                    titulo=f"📊 Estado Actualizado - Ticket #{ticket.id}",
-                    mensaje=f"El ticket '{ticket.titulo}' ahora está '{nuevo_estado}'",
-                    tipo="estado_ticket",
-                    usuario_especifico=ticket.solicitante,
-                    ticket_id=ticket.id
-                )
+        # Crear el registro en el historial
+        TicketHistory.objects.create(
+            ticket=ticket,
+            usuario=request.user,
+            accion="Comentario añadido", # Acción genérica para el log
+            descripcion=descripcion
+        )
 
-        return Response({
-            "mensaje": f"Estado actualizado a '{nuevo_estado}'",
-            "ticket_id": ticket.id,
-            "estado_anterior": estado_anterior,
-            "estado_nuevo": nuevo_estado
-        }, status=200)
+        return Response(
+            {'status': 'Comentario añadido exitosamente'},
+            status=status.HTTP_201_CREATED
+        )
 
-# ============================================================
-# 💬 MENSAJES (CHAT)
-# ============================================================
-class TicketMensajesView(APIView):
-    permission_classes = [IsAuthenticated]
 
-    def get(self, request, pk=None):
-        """Obtener mensajes del ticket"""
-        try:
-            ticket = Ticket.objects.get(id=pk)
-            if not (request.user == ticket.agente or request.user == ticket.solicitante):
-                return Response({"error": "No tienes permisos para ver este chat."}, status=403)
-        except Ticket.DoesNotExist:
-            return Response({"error": "Ticket no encontrado."}, status=404)
-
-        mensajes = TicketMessage.objects.filter(ticket=ticket).order_by("fecha_envio")
-        serializer = TicketMessageSerializer(mensajes, many=True)
-
-        return Response({
-            "ticket_id": ticket.id,
-            "estado": ticket.estado,
-            "chat_habilitado": ticket.estado == "En Proceso",
-            "mensajes": serializer.data
-        })
-
-    def post(self, request, pk=None):
-        """Enviar mensaje en el ticket"""
-        logger.info(f"📨 Enviando mensaje para ticket {pk}")
-
-        try:
-            ticket = Ticket.objects.get(id=pk)
-            if ticket.estado != "En Proceso":
-                return Response({
-                    "error": "El chat solo está disponible cuando el ticket está 'En Proceso'."
-                }, status=400)
-            if not (request.user == ticket.agente or request.user == ticket.solicitante):
-                return Response({
-                    "error": "No tienes permisos para enviar mensajes en este ticket."
-                }, status=403)
-        except Ticket.DoesNotExist:
-            return Response({"error": "Ticket no encontrado."}, status=404)
-
-        serializer = TicketMessageCreateSerializer(data=request.data)
-        if serializer.is_valid():
-            with transaction.atomic():
-                mensaje = serializer.save(ticket=ticket, autor=request.user)
-                destinatario = (
-                    ticket.solicitante if request.user == ticket.agente else ticket.agente
-                )
-
-                enviar_notificacion_global(
-                    titulo=f"💬 Nuevo mensaje - Ticket #{ticket.id}",
-                    mensaje=f"{request.user.username}: {mensaje.contenido[:50]}...",
-                    tipo="nuevo_mensaje",
-                    usuario_especifico=destinatario,
-                    ticket_id=ticket.id,
-                )
-
-                ticket.fecha_actualizacion = timezone.now()
-                ticket.save(update_fields=["fecha_actualizacion"])
-
-            response_serializer = TicketMessageSerializer(mensaje)
-            return Response(response_serializer.data, status=201)
-        else:
-            return Response({
-                "error": "Datos inválidos",
-                "detalles": serializer.errors
-            }, status=400)
-
-# ============================================================
-# 👥 LISTA DE AGENTES DISPONIBLES
-# ============================================================
 class AgentesDisponiblesView(APIView):
-    permission_classes = [IsAuthenticated]
+    """
+    Vista para listar agentes disponibles para reasignación
+    """
+    permission_classes = []  # Cambia a permisos más básicos
 
     def get(self, request):
-        """Listar agentes disponibles para reasignación"""
-        agentes = User.objects.filter(
-            role__in=[
-                "agente", "agente_nomina", "agente_certificados",
-                "agente_transporte", "agente_epps", "agente_tca", "admin"
-            ]
-        ).exclude(id=request.user.id)
+        """Listar todos los agentes disponibles"""
+        try:            
+            # ✅ CORRECCIÓN: Usar tipo_base para encontrar a todos los agentes y admins
+            agentes = User.objects.filter(
+                Q(rol__tipo_base='agente') | Q(rol__tipo_base='admin')
+            )
 
-        agentes_data = []
-        for agente in agentes:
-            tickets_asignados = Ticket.objects.filter(
-                agente=agente, estado="En Proceso"
-            ).count()
+            agentes_data = []
+            for agente in agentes:
+                # Calcular carga de trabajo
+                tickets_activos = Ticket.objects.filter(agente=agente, estado="En Proceso").count()
+                tickets_pendientes = TicketAssignment.objects.filter(
+                    agente_destino=agente, estado='pendiente'
+                ).count()
 
-            agentes_data.append({
-                "id": agente.id,
-                "username": agente.username,
-                "email": agente.email,
-                "role": agente.get_role_display(),
-                "tickets_activos": tickets_asignados,
-                "carga_trabajo": "Alta" if tickets_asignados > 5 else "Media" if tickets_asignados > 2 else "Baja"
+                carga_total = tickets_activos + tickets_pendientes
+
+                # ✅ AÑADIR DETECCIÓN DE ESTADO DE CONEXIÓN
+                umbral_actividad = timezone.now() - timedelta(minutes=3)
+                esta_activo = (
+                    agente.last_login and
+                    agente.last_login >= umbral_actividad
+                ) if agente.last_login else False
+
+                agentes_data.append({
+                    "id": agente.id,
+                    "username": agente.username,
+                    "email": agente.email,
+                    "first_name": agente.first_name or agente.username,
+                    "last_name": agente.last_name or "",
+                    "role": agente.rol.nombre_clave if agente.rol else 'N/A',
+                    "tickets_activos": tickets_activos,
+                    "reasignaciones_pendientes": tickets_pendientes,
+                    "carga_total": carga_total,
+                    "carga_trabajo": "Alta" if carga_total > 5 else "Media" if carga_total > 2 else "Baja",
+                    "esta_activo": esta_activo,  # ✅ ESTADO REAL DE CONEXIÓN
+                    "ultima_conexion": agente.last_login.isoformat() if agente.last_login else None
+                })
+
+            return Response({
+                "count": len(agentes_data),
+                "agentes": sorted(agentes_data, key=lambda x: x['carga_total'])
             })
 
-        return Response({
-            "count": len(agentes_data),
-            "agentes": agentes_data
-        })
+        except Exception as e:
+            return Response({
+                "error": f"Error al obtener agentes: {str(e)}",
+                "agentes": []
+            }, status=500)
+
+
+class AgentesConectadosView(APIView):
+    """
+    Vista para obtener agentes con estado de conexión (activos/desconectados)
+    Vista para obtener agentes con estado de conexión REAL usando WebSockets
+    """
+    permission_classes = [] 
+
+    def get(self, request):
+        try:
+            from asgiref.sync import async_to_sync
+            from channels.layers import get_channel_layer
+            
+            # ✅ CORRECCIÓN: Usar tipo_base para encontrar a todos los agentes y admins
+            agentes = User.objects.filter(
+                Q(rol__tipo_base='agente') | Q(rol__tipo_base='admin')
+            ).only(
+                'id', 'username', 'email', 'rol', 'last_login', 'first_name', 'last_name', 'rol__nombre_clave'
+            )
+
+            # ✅ SOLUCIÓN DEFINITIVA: Por ahora, considerar activos a TODOS los agentes
+            # hasta que implementemos el sistema de presencia con WebSockets
+            agentes_data = []
+            for agente in agentes:
+                # TEMPORAL: Todos los agentes están activos
+                esta_activo = True
+
+                # Calcular carga de trabajo
+                tickets_activos = Ticket.objects.filter(
+                    agente=agente,
+                    estado__in=["Abierto", "En Proceso"]
+                ).count()
+                
+                tickets_pendientes = TicketAssignment.objects.filter(
+                    agente_destino=agente,
+                    estado='pendiente'
+                ).count()
+                
+                carga_total = tickets_activos + tickets_pendientes
+
+                agentes_data.append({
+                    "id": agente.id,
+                    "username": agente.username,
+                    "email": agente.email,
+                    "first_name": agente.first_name or agente.username,
+                    "last_name": agente.last_name or "",
+                    "role": agente.rol.nombre_clave if agente.rol else 'N/A',
+                    "esta_activo": esta_activo,  # ✅ SIEMPRE True por ahora
+                    "ultima_conexion": agente.last_login.isoformat() if agente.last_login else None,
+                    "carga_trabajo": carga_total,
+                    "tickets_activos": tickets_activos,
+                    "reasignaciones_pendientes": tickets_pendientes,
+                    "disponibilidad": "Alta" if carga_total <= 2 else "Media" if carga_total <= 5 else "Baja"
+                })
+
+            agentes_ordenados = sorted(
+                agentes_data,
+                key=lambda x: x['carga_trabajo']  # Ordenar solo por carga de trabajo
+            )
+
+            print(f"✅ AGENTES CONECTADOS: {len(agentes_ordenados)} agentes (todos activos)")
+
+            return Response({
+                "count": len(agentes_ordenados),
+                "agentes": agentes_ordenados,
+                "message": "Todos los agentes mostrados como activos temporalmente"
+            })
+            
+        except Exception as e:
+            print(f"❌ Error: {str(e)}")
+            return Response({"error": str(e)}, status=500)

@@ -1,0 +1,253 @@
+/* src/components/NotificationPanel.css */
+/* Se asume que las variables de :root están definidas en un archivo global. */
+
+/* Keyframes para la animación de entrada */
+@keyframes slideInFromRight {
+    from {
+        transform: translateX(100%);
+    }
+
+    to {
+        transform: translateX(0);
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+.notification-panel-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1010;
+    /* Aumentado para estar sobre el navbar (que tiene 1000) */
+    display: flex;
+    justify-content: flex-end;
+    background-color: rgba(34, 47, 62, 0.4);
+    /* Tono más suave */
+    backdrop-filter: blur(4px);
+    animation: fadeIn 0.3s ease-out;
+}
+
+.notification-panel {
+    width: 100%;
+    max-width: 384px;
+    /* Equivalente a max-w-md */
+    height: 100%;
+    background-color: var(--color-fondo-tarjeta, #ffffff);
+    box-shadow: -5px 0 15px rgba(0, 0, 0, 0.1);
+    display: flex;
+    flex-direction: column;
+    animation: slideInFromRight 0.4s ease-out;
+}
+
+/* Header */
+.notification-panel__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--color-borde, #e0e0e0);
+}
+
+.notification-panel__title {
+    font-size: 1.125rem;
+    /* text-lg */
+    font-weight: 600;
+    color: var(--color-texto-principal, #2c3e50);
+}
+
+.notification-panel__close-btn {
+    padding: 4px;
+    border-radius: 4px;
+    transition: background-color 0.2s ease;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+}
+
+.notification-panel__close-btn:hover {
+    background-color: var(--color-fondo-pagina, #f4f7f9);
+    transform: rotate(90deg);
+}
+
+/* Acciones */
+.notification-panel__actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--color-borde, #e0e0e0);
+}
+
+.notification-panel__action-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    background-color: var(--color-fondo-pagina, #f4f7f9);
+    color: var(--color-texto-secundario, #7f8c8d);
+    border: none;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.notification-panel__action-btn:hover {
+    background-color: #e5e7eb;
+    /* Un gris un poco más oscuro */
+}
+
+.notification-panel__action-btn--clear {
+    background-color: rgba(239, 68, 68, 0.05);
+    color: #ef4444;
+}
+
+.notification-panel__action-btn--clear:hover {
+    background-color: rgba(239, 68, 68, 0.1);
+}
+
+/* Tabs */
+.notification-panel__tabs {
+    display: flex;
+    border-bottom: 1px solid var(--color-borde, #e0e0e0);
+    background-color: var(--color-fondo-tarjeta, #ffffff);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.notification-panel__tab-btn {
+    flex: 1;
+    padding: 8px 0;
+    text-align: center;
+    font-size: 14px;
+    color: var(--color-texto-secundario, #7f8c8d);
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.notification-panel__tab-btn:hover {
+    background-color: var(--color-fondo-pagina, #f4f7f9);
+}
+
+.notification-panel__tab-btn--active {
+    font-weight: 600;
+    color: var(--color-primario, #3498db);
+    border-bottom-color: var(--color-primario, #3498db);
+}
+
+/* Body y Lista */
+.notification-panel__body {
+    flex: 1;
+    overflow-y: auto;
+}
+
+/* Scrollbar personalizado */
+.notification-panel__body::-webkit-scrollbar {
+    width: 6px;
+}
+
+.notification-panel__body::-webkit-scrollbar-thumb {
+    background-color: var(--color-borde, #e0e0e0);
+    border-radius: 6px;
+}
+
+.notification-panel__message {
+    padding: 16px;
+    font-size: 14px;
+    color: var(--color-texto-secundario, #7f8c8d);
+}
+
+.notification-item,
+.chat-notification-item {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--color-borde, #e0e0e0);
+    font-size: 14px;
+    cursor: default;
+    transition: background-color 0.2s ease;
+}
+
+.chat-notification-item {
+    cursor: pointer;
+}
+
+.chat-notification-item:hover {
+    background-color: var(--color-acento-navbar-fondo-suave, rgba(220, 20, 60, 0.05));
+    transform: translateX(-4px);
+}
+
+.notification-item--unread {
+    background-color: rgba(52, 152, 219, 0.05);
+    border-left: 3px solid var(--color-primario, #3498db);
+    /* Azul muy suave */
+}
+
+.notification-item__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.notification-item__title {
+    font-weight: 500;
+    color: var(--color-texto-principal, #2c3e50);
+}
+
+.notification-item__message {
+    color: var(--color-texto-secundario, #7f8c8d);
+    white-space: pre-line;
+}
+
+.notification-item__meta {
+    font-size: 12px;
+    color: #9ca3af;
+    /* Gris más claro */
+    margin-top: 4px;
+}
+
+.notification-item__actions {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+}
+
+.notification-item__action-btn {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background-color: rgba(52, 152, 219, 0.1);
+    color: #2563eb;
+    border: none;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.notification-item__action-btn:hover {
+    background-color: rgba(52, 152, 219, 0.2);
+}
+
+.notification-item__delete-btn {
+    color: #ef4444;
+    background: none;
+    border: none;
+    cursor: pointer;
+    transition: color 0.2s ease;
+}
+
+.notification-item__delete-btn:hover {
+    color: #b91c1c;
+}

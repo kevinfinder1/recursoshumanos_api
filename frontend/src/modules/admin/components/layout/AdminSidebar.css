@@ -1,0 +1,155 @@
+/* src/modules/admin/components/layout/AdminSidebar.css */
+.admin-sidebar {
+    width: 250px;
+    background-color: #ffffff;
+    color: #34495e;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid #e0e0e0;
+    transition: width 0.3s ease, transform 0.3s ease;
+}
+
+.sidebar-logo {
+    padding: 20px;
+    border-bottom: 1px solid #e0e0e0;
+    position: relative;
+    text-align: center;
+}
+
+.sidebar-logo h2 {
+    margin: 0;
+    color: #2c3e50;
+    font-size: 1.2rem;
+}
+
+.btn-cerrar-sidebar {
+    display: none;
+    /* Oculto por defecto */
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: none;
+    border: none;
+    font-size: 2rem;
+    color: #7f8c8d;
+    cursor: pointer;
+    line-height: 1;
+    padding: 5px;
+}
+
+.sidebar-nav {
+    flex: 1;
+    padding: 10px 0;
+}
+
+.sidebar-menu {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.menu-item {
+    margin: 5px 10px;
+}
+
+.menu-link {
+    display: flex;
+    align-items: center;
+    padding: 14px 20px;
+    color: #5d6d7e;
+    text-decoration: none;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+}
+
+.menu-link:hover {
+    background-color: #f4f7f9;
+    color: #c41313;
+}
+
+.menu-activo {
+    background-color: #c41313;
+    color: white;
+    box-shadow: 0 4px 12px rgba(219, 52, 183, 0.3);
+}
+
+.menu-activo:hover {
+    background-color: #c41313;
+    color: white;
+}
+
+.menu-icono {
+    margin-right: 15px;
+    font-size: 1.1rem;
+}
+
+.menu-texto {
+    font-weight: 500;
+}
+
+/* --- Estilos Responsivos --- */
+
+/* Para tablets y escritorios pequeños: colapsar la barra lateral */
+@media (max-width: 992px) {
+    .admin-sidebar {
+        width: 85px;
+    }
+
+    .sidebar-logo h2 {
+        display: none;
+        /* Ocultar el texto del logo */
+    }
+
+    .menu-texto {
+        display: none;
+        /* Ocultar el texto de los items del menú */
+    }
+
+    .menu-link {
+        justify-content: center;
+        /* Centrar el ícono */
+    }
+
+    .menu-icono {
+        margin-right: 0;
+    }
+}
+
+/* Para dispositivos móviles: ocultar la barra lateral por defecto */
+@media (max-width: 768px) {
+    .admin-sidebar {
+        position: absolute;
+        z-index: 1000;
+        height: 100%;
+        transform: translateX(-100%);
+        /* Ocultar fuera de la pantalla */
+        border-right: 1px solid #e0e0e0;
+    }
+
+    /* 
+      Clase para mostrar la barra lateral en móviles (se debe agregar con JavaScript).
+      Ejemplo: <div class="admin-sidebar is-open">
+    */
+    .admin-sidebar.is-open {
+        transform: translateX(0);
+        box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+        /* Cuando está abierto en móvil, restauramos el ancho completo y el texto */
+        width: 250px;
+    }
+
+    .admin-sidebar.is-open .sidebar-logo h2 {
+        display: block;
+    }
+
+    .admin-sidebar.is-open .btn-cerrar-sidebar {
+        display: block;
+    }
+
+    .admin-sidebar.is-open .menu-texto {
+        display: inline;
+    }
+
+    .admin-sidebar.is-open .menu-link {
+        justify-content: flex-start;
+    }
+}
