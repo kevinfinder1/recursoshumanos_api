@@ -83,12 +83,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
             return
 
         # ============================
-        #  NUEVO: BROADCAST DE MENSAJES (si se maneja por WS)
-        # ============================
-        if event_type == "chat_message":
-            # Esta lógica se puede mover aquí desde la señal si se prefiere
-            pass
-        # ============================
         #  EVENTO DE ESCRITURA (TYPING)
         # ============================
         if event_type == "typing":
@@ -111,25 +105,18 @@ class ChatConsumer(AsyncWebsocketConsumer):
             )
             return
 
-        message = data.get("message", "").strip()
-        message_type = data.get("message_type", "text")
+        # Si el evento no es 'typing' o 'stop_typing', no hacemos nada.
+        # La creación de mensajes se maneja vía API REST.
+        return
 
-        if not message:
-            await self.send(text_data=json.dumps({
-                "error": "El contenido del mensaje no puede estar vacío."
-            }))
-            return
-
-        # El envío de mensajes de chat se maneja vía API HTTP y se notifica por signals.
-        # El WebSocket solo gestiona eventos de 'typing'.
-        pass
-
-    async def chat_message(self, event):
+    async def chat_event(self, event):
         """
-        Evento que recibe cada cliente conectado al grupo.
+        Manejador genérico para todos los eventos de chat (nuevo, editado, borrado).
+        Recibe el evento desde la señal y lo reenvía al cliente.
         """
         await self.send(text_data=json.dumps({
-            **event["message"]  # Enviar el objeto de mensaje serializado completo
+            "type": event["event_type"], # 'chat_message_new' o 'chat_message_update'
+            "message": event["message"]
         }))
 
     async def group_typing(self, event):
@@ -273,20 +260,16 @@ class GroupChatConsumer(AsyncWebsocketConsumer):
             )
             return
 
-        message = data.get("message", "").strip()
-        message_type = data.get("message_type", "text")
-        sender = self.user
+        return
 
-        if not message or not sender.is_authenticated:
-            return
-
-        # El envío de mensajes de chat se maneja vía API HTTP y se notifica por signals.
-        pass
-
-    async def group_message(self, event):
-        # Enviar mensaje al cliente WebSocket
+    async def chat_event(self, event):
+        """
+        Manejador genérico para todos los eventos de chat (nuevo, editado, borrado).
+        Recibe el evento desde la señal y lo reenvía al cliente.
+        """
         await self.send(text_data=json.dumps({
-            **event["message"]  # Enviar el objeto de mensaje serializado completo
+            "type": event["event_type"],
+            "message": event["message"]
         }))
 
     async def group_typing(self, event):

@@ -1,125 +1,134 @@
-// src/chat/ChatLayout.jsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import ChatSidebar from "./ChatSidebar";
 import ChatWindow from "./ChatWindow";
 import GroupChatWindow from "./GroupChatWindow";
 import API from "../api/axiosInstance";
-import useActiveAgents from "../hooks/useActiveAgents";
 import { useAuth } from "../context/AuthContext";
 import "./Chat.css";
 
 const ChatLayout = () => {
+    const { user } = useAuth();
+    const isAgent = user?.rol?.tipo_base === 'agente' || user?.rol?.tipo_base === 'admin';
+
     const [selectedChat, setSelectedChat] = useState(null);
     const [chats, setChats] = useState([]);
-    const { user } = useAuth();
+    const [activeAgents, setActiveAgents] = useState([]);
+    const [inactiveAgents, setInactiveAgents] = useState([]);
+    const [loadingAgents, setLoadingAgents] = useState(false);
+    const [agentsError, setAgentsError] = useState(null);
 
-    // Solo los agentes o admins pueden ver la lista de otros agentes
-    const isAgentOrAdmin =
-        user && (user.role === "admin" || user.role?.startsWith("agente"));
+    const loadChats = useCallback(async () => {
+        try {
+            const response = await API.get("/chat/rooms/");
+            setChats(response.data.results || response.data || []);
+        } catch (error) {
+            console.error("Error cargando chats:", error);
+            setChats([]);
+        }
+    }, []);
 
-    const {
-        activeAgents,
-        inactiveAgents,
-        loading: loadingAgents,
-        error: agentsError
-    } = isAgentOrAdmin ? useActiveAgents(15000) : { activeAgents: [], inactiveAgents: [], loading: false, error: null };
+    const loadAgents = useCallback(async () => {
+        if (!isAgent) return;
+        setLoadingAgents(true);
+        setAgentsError(null);
+        try {
+            const response = await API.get("/users/agents/");
+            const allAgents = response.data.results || response.data || [];
+            setActiveAgents(allAgents);
+            setInactiveAgents([]);
+        } catch (error) {
+            console.error("Error cargando agentes:", error);
+            setAgentsError("No se pudieron cargar los agentes.");
+        } finally {
+            setLoadingAgents(false);
+        }
+    }, [isAgent]);
 
     useEffect(() => {
         loadChats();
-        const interval = setInterval(() => {
-            loadChats();
-        }, 3000);
+        loadAgents();
 
-        return () => clearInterval(interval);
-    }, []);
+        const handleResize = () => {
+            // La lógica de visibilidad ahora es manejada puramente por CSS
+            // a través de las clases y media queries.
+        };
 
-    // También recargar cuando se selecciona un chat diferente
-    useEffect(() => {
-        if (selectedChat) {
-            loadChats();
-        }
-    }, [selectedChat]);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, [loadChats, loadAgents]); // Se elimina selectedChat de las dependencias
 
-    const loadChats = async () => {
-        try {
-            const res = await API.get("/chat/rooms/");
-            const chatsData = res.data.results || res.data || [];
-            setChats(chatsData);
-        } catch (error) {
-            console.error("Error cargando chats:", error);
-        }
+    const handleSelectChat = (chat) => {
+        setSelectedChat(chat);
+        // Forzar scroll al top al cambiar de chat, útil en móvil.
+        window.scrollTo(0, 0);
+    };
+
+    const handleBackToSidebar = () => {
+        setSelectedChat(null);
+        // Forzar scroll al top al regresar, útil en móvil.
+        window.scrollTo(0, 0);
     };
 
     return (
         <div className="chat-layout">
-            <ChatSidebar
-                chats={chats}
-                selectedChat={selectedChat}
-                setSelectedChat={setSelectedChat}
-                activeAgents={activeAgents}
-                inactiveAgents={inactiveAgents}
-                loadingAgents={loadingAgents}
-                agentsError={agentsError}
-                isAgent={isAgentOrAdmin}
-                reloadChats={loadChats}
-            />
+            {/* Sidebar - visible en desktop, oculto en móvil cuando hay chat seleccionado */}
+            <div className={`chat-sidebar-container ${selectedChat ? 'hidden' : 'visible'}`}> {/* Lógica de clases simplificada */}
+                <ChatSidebar
+                    chats={chats}
+                    selectedChat={selectedChat}
+                    setSelectedChat={handleSelectChat}
+                    reloadChats={loadChats}
+                    activeAgents={activeAgents}
+                    inactiveAgents={inactiveAgents}
+                    loadingAgents={loadingAgents}
+                    agentsError={agentsError}
+                    isAgent={isAgent}
+                    onBack={handleBackToSidebar}
+                />
+            </div>
 
-            {selectedChat ? (
-                selectedChat.type === "group" ? (
-                    <GroupChatWindow group={selectedChat.group_name} />
+            {/* Ventana de chat - visible cuando hay chat seleccionado */}
+            <div className={`chat-main-content ${selectedChat ? 'chat-selected' : 'no-chat-selected'}`}>
+                {selectedChat ? (
+                    selectedChat.type === 'room' ? (
+                        <ChatWindow
+                            chat={selectedChat.data}
+                            onBack={handleBackToSidebar}
+                        />
+                    ) : selectedChat.type === 'group' ? (
+                        <GroupChatWindow
+                            group={selectedChat.data.name}
+                            onBack={handleBackToSidebar}
+                        />
+                    ) : null
                 ) : (
-                    <ChatWindow chat={selectedChat} />
-                )
-            ) : (
-                <div className="chat-empty">
-                    <div className="chat-empty__card">
-                        <div className="chat-empty__icon-circle">
-                            {/* puedes dejar tu svg aquí */}
-                            <svg
-                                className="w-12 h-12 text-blue-400"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                            >
-                                <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={1.5}
-                                    d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-                                />
-                            </svg>
-                        </div>
-                        <h3 className="chat-empty__title">Selecciona un chat</h3>
-                        <p className="chat-empty__subtitle">
-                            Elige una conversación en la barra lateral para empezar a
-                            chatear.
-                        </p>
-                        <div className="chat-empty__legend">
-                            <div className="chat-empty__legend-item">
-                                <div
-                                    className="chat-empty__legend-dot"
-                                    style={{ backgroundColor: "#00ff9d", boxShadow: "0 0 8px #00ff9d" }}
-                                />
-                                <span>Activo</span>
+                    <div className="chat-empty">
+                        <div className="chat-empty__card">
+                            <div className="chat-empty__icon-circle">
+                                <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
+                                    <path d="M20 2H4C2.9 2 2 2.9 2 4V22L6 18H20C21.1 18 22 17.1 22 16V4C22 2.9 21.1 2 20 2Z"
+                                        fill="#3498db" fillOpacity="0.1" stroke="#3498db" strokeWidth="2" />
+                                    <path d="M8 10H16M8 14H12" stroke="#3498db" strokeWidth="2" strokeLinecap="round" />
+                                </svg>
                             </div>
-                            <div className="chat-empty__legend-item">
-                                <div
-                                    className="chat-empty__legend-dot"
-                                    style={{ backgroundColor: "#ff003c" }}
-                                />
-                                <span>Seleccionado</span>
-                            </div>
-                            <div className="chat-empty__legend-item">
-                                <div
-                                    className="chat-empty__legend-dot"
-                                    style={{ backgroundColor: "#00a8ff" }}
-                                />
-                                <span>Grupo</span>
+                            <h3 className="chat-empty__title">¡Hola, {user?.username}!</h3>
+                            <p className="chat-empty__subtitle">
+                                {isAgent ? "Selecciona un chat para empezar a conversar" : "Tus conversaciones aparecerán aquí"}
+                            </p>
+                            <div className="chat-empty__legend">
+                                <div className="chat-empty__legend-item">
+                                    <div className="chat-empty__legend-dot chat-empty__legend-dot--online"></div>
+                                    <span>Online</span>
+                                </div>
+                                <div className="chat-empty__legend-item">
+                                    <div className="chat-empty__legend-dot chat-empty__legend-dot--offline"></div>
+                                    <span>Offline</span>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )}
+            </div>
         </div>
     );
 };

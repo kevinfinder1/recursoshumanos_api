@@ -27,8 +27,14 @@ class NotificationViewSet(viewsets.ModelViewSet):
         """
         user = self.request.user
         if user.is_anonymous:
+            print("❌ NOTIFICACIONES: Usuario anónimo")
             return Notification.objects.none()
-        return Notification.objects.filter(usuario=user).order_by('-fecha_creacion')
+        
+        qs = Notification.objects.filter(usuario=user).order_by('-fecha_creacion')
+        print(f"✅ NOTIFICACIONES para {user.username}: {qs.count()} notificaciones")
+        print(f"   IDs: {list(qs.values_list('id', flat=True))}")
+        
+        return qs
 
     @action(detail=False, methods=['post'], url_path='mark_all_read')
     def mark_all_read(self, request):
@@ -59,8 +65,14 @@ class NotificationViewSet(viewsets.ModelViewSet):
         """
         Marca una notificación específica como leída.
         """
+        if not id:
+            return Response(
+                {"error": "ID de notificación no proporcionado"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
         try:
-            notif = self.get_object()
+            notif = Notification.objects.get(id=id, usuario=request.user)
             notif.leida = True
             notif.save(update_fields=['leida'])
             return Response(
@@ -69,7 +81,7 @@ class NotificationViewSet(viewsets.ModelViewSet):
             )
         except Notification.DoesNotExist:
             return Response(
-                {"error": "Notificación no encontrada"},
+                {"error": "Notificación no encontrada o no te pertenece"},
                 status=status.HTTP_404_NOT_FOUND
             )
         except Exception as e:

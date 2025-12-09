@@ -22,6 +22,8 @@ class MessageSerializer(serializers.ModelSerializer):
             "file_url",
             "message_type",
             "timestamp",
+            "is_edited",
+            "is_deleted",
         ]
 
     def get_file_url(self, obj):
@@ -40,6 +42,18 @@ class MessageSerializer(serializers.ModelSerializer):
                 # En producción, usar URL absoluta
                 return request.build_absolute_uri(obj.file.url) if request else obj.file.url
         return None
+
+    def to_representation(self, instance):
+        """
+        Si el mensaje está borrado, oculta el contenido y el archivo.
+        """
+        ret = super().to_representation(instance)
+        if instance.is_deleted:
+            ret['content'] = "Este mensaje fue eliminado."
+            ret['file'] = None
+            ret['file_url'] = None
+            ret['message_type'] = 'text' # Se convierte en un mensaje de texto simple
+        return ret
 
 
 

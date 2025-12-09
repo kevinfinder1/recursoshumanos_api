@@ -1,5 +1,6 @@
 # chat/views.py
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import generics, permissions
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -34,6 +35,11 @@ class StartDirectChatView(APIView):
         User = get_user_model()
         user2 = get_object_or_404(User, id=target_user_id)
 
+        # Validación: Asegurarse que el target también es agente/admin
+        if not user2.rol or user2.rol.tipo_base not in ['agente', 'admin']:
+            return Response({"error": "Solo se pueden iniciar chats directos con otros agentes o administradores."}, status=403)
+
+
         # Buscar una sala de chat directa que tenga exactamente a estos dos participantes
         room = ChatRoom.objects.annotate(
             p_count=Count('participants')
@@ -53,11 +59,6 @@ class StartDirectChatView(APIView):
 
         serializer = ChatRoomSerializer(room, context={'request': request})
         return Response(serializer.data, status=200)
-
-
-# ============================================================
-#  MODIFICAR SendMessageView PARA ACEPTAR ID DE ROOM
-# ============================================================
 
 
 # ============================================================
@@ -167,13 +168,56 @@ class SendMessageView(APIView):
         return Response(serializer.data, status=201)
 
 
+# ============================================================
+#  EDITAR / BORRAR UN MENSAJE
+# ============================================================
+class MessageDetailView(APIView):
+    """
+    Permite al autor de un mensaje editarlo (PATCH) o borrarlo (DELETE).
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def patch(self, request, pk):
+        """Editar el contenido de un mensaje."""
+        message = get_object_or_404(Message, id=pk)
+
+        # Validar que el usuario es el autor
+        if message.sender != request.user:
+            return Response({"error": "No tienes permiso para editar este mensaje."}, status=403)
+
+        new_content = request.data.get("content", "").strip()
+        if not new_content:
+            return Response({"error": "El contenido no puede estar vacío."}, status=400)
+
+        message.content = new_content
+        message.is_edited = True
+        message.save(update_fields=['content', 'is_edited'])
+
+        serializer = MessageSerializer(message, context={"request": request})
+        return Response(serializer.data, status=200)
+
+    def delete(self, request, pk):
+        """Marcar un mensaje como eliminado (soft delete)."""
+        message = get_object_or_404(Message, id=pk)
+
+        # Validar que el usuario es el autor
+        if message.sender != request.user:
+            return Response({"error": "No tienes permiso para eliminar este mensaje."}, status=403)
+
+        message.is_deleted = True
+        # Opcional: limpiar contenido para no guardar datos innecesarios
+        message.content = ""
+        message.file = None
+        message.save(update_fields=['is_deleted', 'content', 'file'])
+
+        return Response(status=204) # 204 No Content es estándar para un borrado exitoso
+
 # =============================================================================
 #                           CHAT GRUPAL RRHH
 # =============================================================================
 
-# ============================================================
 #  LISTAR MENSAJES DEL CHAT GRUPAL
-# ============================================================
+
 class GroupChatMessagesView(APIView):
     permission_classes = [permissions.IsAuthenticated, IsAgentOrAdmin]
 
@@ -190,16 +234,16 @@ class GroupChatMessagesView(APIView):
             return Response({
                 "group": group_chat.name,
                 "messages": serializer.data,
-                "total_messages": messages.count()
+                "total_messages": len(messages) # Optimización: Usar len() en lugar de .count()
             })
 
         except Exception as e:
             return Response({"error": f"Error al obtener mensajes: {str(e)}"}, status=500)
 
 
-# ============================================================
 #  ENVIAR MENSAJE AL CHAT GRUPAL (SOLO RRHH / AGENTES)
-# ============================================================
+
+
 class GroupChatSendMessageView(APIView):
     permission_classes = [permissions.IsAuthenticated, IsAgentOrAdmin]
 
@@ -246,9 +290,8 @@ class GroupChatSendMessageView(APIView):
             return Response({"error": f"Error al enviar mensaje: {str(e)}"}, status=500)
 
 
-# ============================================================
 #  INFO BÁSICA DEL CHAT GRUPAL
-# ============================================================
+
 class GroupChatInfoView(APIView):
     permission_classes = [permissions.IsAuthenticated, IsAgentOrAdmin]
 
@@ -268,27 +311,40 @@ class GroupChatInfoView(APIView):
             return Response({"error": f"Error al obtener información: {str(e)}"}, status=500)
 
 
-# ============================================================
 #  DESCARGA DE ARCHIVOS (PROTEGIDA)
-# ============================================================
+
 class FileDownloadView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, file_path):
-        # TODO: Se podría añadir una validación más robusta para asegurar
-        # que el usuario pertenece al chat donde se envió el archivo.
-        full_path = os.path.join(settings.MEDIA_ROOT, 'chat_files', file_path)
+        # Construir la ruta relativa del archivo como se guarda en la BD
+        db_file_path = os.path.join('chat_files', file_path)
 
-        if not os.path.exists(full_path):
+        # Buscar el mensaje que contiene este archivo
+        message = get_object_or_404(Message, file=db_file_path)
+
+        # Validar permisos
+        user_can_access = False
+        if message.room:
+            # Si el mensaje está en un ChatRoom, verificar si el usuario es participante
+            if message.room.participants.filter(id=request.user.id).exists():
+                user_can_access = True
+        elif message.group:
+            # Si el mensaje está en un GroupChat, verificar si el usuario es agente/admin
+            if request.user.rol and request.user.rol.tipo_base in ['agente', 'admin']:
+                user_can_access = True
+
+        if not user_can_access:
+            return Response({"error": "No tienes permiso para acceder a este archivo."}, status=403)
+
+        # Servir el archivo de forma segura si el usuario tiene permiso
+        if not os.path.exists(os.path.join(settings.MEDIA_ROOT, db_file_path)):
             return Response({"error": "Archivo no encontrado"}, status=404)
-
-        # Servir el archivo de forma segura
         return serve(request, file_path, document_root=os.path.join(settings.MEDIA_ROOT, 'chat_files'))
 
 
-# ============================================================
 #  VISTA DE REPARACIÓN
-# ============================================================
+
 class RepairTicketChatsView(APIView):
     """Endpoint para crear chat rooms para tickets existentes que no los tienen"""
     permission_classes = [permissions.IsAuthenticated, IsAgentOrAdmin]

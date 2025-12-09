@@ -1,26 +1,36 @@
 // ChatWindow.jsx - CORREGIDO
 import React, { useState, useEffect } from 'react';
-import ChatHeader from "./ChatHeader";
+import ChatHeader from "./ChatHeader"; // Importamos el nuevo ChatHeader
 import ChatMessages from "./ChatMessages";
 import ChatInput from "./ChatInput";
 import ImageViewer from "./ImageViewer";
 import API from "../api/axiosInstance";
 import useChatSocket from "../hooks/useChatSocket";
 
-const ChatWindow = ({ chat }) => {
+const ChatWindow = ({ chat, onBack }) => {
     const [messages, setMessages] = useState([]);
     const [imagePreview, setImagePreview] = useState(null);
 
     // 🚀 CONECTAR USANDO EL ID DE LA SALA DE CHAT
-    const wsRef = useChatSocket(chat.id, (msg) => {
-        setMessages((prev) => {
-            // ✅ Ignorar eventos que no son mensajes de chat (como 'typing')
-            if (!msg.id || !msg.timestamp) {
-                return prev;
+    const wsRef = useChatSocket(chat.id, (event) => {
+        const { type, message: msg } = event;
+
+        if (type === 'chat_message_new') {
+            setMessages((prev) => {
+                if (prev.find(m => m.id === msg.id)) return prev;
+                return [...prev, msg];
+            });
+        }
+
+        if (type === 'chat_message_update') {
+            setMessages((prev) =>
+                prev.map(m => m.id === msg.id ? msg : m)
+            );
+            // Si el mensaje actualizado es el que se está editando, cancelar la edición
+            if (document.activeElement.tagName === 'TEXTAREA' && document.activeElement.closest('.message-edit-container')) {
+                document.activeElement.blur();
             }
-            if (prev.find(m => m.id === msg.id)) return prev;
-            return [...prev, msg];
-        });
+        }
     });
 
     useEffect(() => {
@@ -47,8 +57,10 @@ const ChatWindow = ({ chat }) => {
 
     return (
         <div className="chat-window">
-            <ChatHeader chat={chat} />
+            <ChatHeader chat={chat} onBack={onBack} /> {/* Pasa onBack al header */}
             <ChatMessages
+                roomId={chat.id} // ✅ Pasar el ID de la sala para la paginación
+                setMessages={setMessages} // Pasamos la función para actualizar el estado
                 messages={messages}
                 onImageClick={(src) => setImagePreview(src)}
             />

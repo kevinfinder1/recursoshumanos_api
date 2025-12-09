@@ -8,9 +8,8 @@ from asgiref.sync import async_to_sync
 User = settings.AUTH_USER_MODEL
 
 
-# -----------------------------------
 # 1. CHAT GRUPAL (AGENTES / RRHH)
-# -----------------------------------
+
 class GroupChat(models.Model):
     name = models.CharField(max_length=100, unique=True)
     description = models.TextField(blank=True, null=True)
@@ -20,9 +19,8 @@ class GroupChat(models.Model):
         return self.name
 
 
-# -----------------------------------
 # 2. CHAT POR TICKET
-# -----------------------------------
+
 class ChatRoom(models.Model):
     CHAT_TYPE_CHOICES = [
         ('TICKET', 'Chat de Ticket'),
@@ -59,9 +57,8 @@ class ChatRoom(models.Model):
         return f"Direct ChatRoom #{self.id}"
 
 
-# -----------------------------------
 # 3. MENSAJES (TEXTO / IMAGEN / ARCHIVO)
-# -----------------------------------
+
 class Message(models.Model):
     MESSAGE_TYPES = (
         ('text', 'Texto'),
@@ -109,6 +106,10 @@ class Message(models.Model):
     )
 
     timestamp = models.DateTimeField(auto_now_add=True)
+    
+    # Nuevos campos para editar/borrar
+    is_edited = models.BooleanField(default=False)
+    is_deleted = models.BooleanField(default=False)
 
     def __str__(self):
         who = self.sender.username
@@ -129,33 +130,38 @@ class Message(models.Model):
         return "Mensaje"
 
 
-# ============================================================
 #  SEÑAL PARA BROADCAST DE MENSAJES POR WEBSOCKET
-# ============================================================
+
 @receiver(post_save, sender=Message)
 def broadcast_message(sender, instance, created, **kwargs):
     """
-    Se dispara después de que se guarda un mensaje.
-    Si es un mensaje nuevo (created=True), lo envía por WebSocket.
+    Se dispara después de que se guarda un mensaje (creado o actualizado).
+    Envía el estado del mensaje por WebSocket.
     """
+    channel_layer = get_channel_layer()
+    # Importar serializer aquí para evitar importación circular
+    from .serializers import MessageSerializer
+
+    serialized_message = MessageSerializer(instance).data
+
+    if instance.room:
+        group_name = f"chat_room_{instance.room.id}"
+    elif instance.group:
+        group_name = f"group_chat_{instance.group.name}"
+    else:
+        return # No hay a dónde enviar
+
+    # Determinar el tipo de evento a enviar
     if created:
-        channel_layer = get_channel_layer()
-        # Importar serializer aquí para evitar importación circular
-        from .serializers import MessageSerializer
+        event_type = "chat_message_new"
+    else:
+        event_type = "chat_message_update"
 
-        serialized_message = MessageSerializer(instance).data
-
-        if instance.room:
-            # Es un chat de ticket o directo. Usamos el ID de la sala de chat.
-            # Esto coincide con la lógica del ChatConsumer: f"chat_room_{self.room_name}"
-            group_name = f"chat_room_{instance.room.id}"
-            event_type = "chat_message"
-        elif instance.group:
-            # Es un chat grupal
-            group_name = f"group_chat_{instance.group.name}"
-            event_type = "group_message"
-
-        async_to_sync(channel_layer.group_send)(
-            group_name,
-            {"type": event_type, "message": serialized_message}
-        )
+    async_to_sync(channel_layer.group_send)(
+        group_name,
+        {
+            "type": "chat_event", # DEBE COINCIDIR con el nombre del método en el consumer
+            "event_type": event_type,
+            "message": serialized_message
+        }
+    )

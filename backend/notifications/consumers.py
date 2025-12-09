@@ -68,6 +68,36 @@ class NotificationConsumer(AsyncWebsocketConsumer):
         except Exception:
             pass
 
+    async def receive(self, text_data):
+        """Maneja mensajes recibidos desde el cliente"""
+        try:
+            data = json.loads(text_data)
+            action = data.get('action')
+            
+            if action == 'mark_as_read':
+                notification_id = data.get('notification_id')
+                if notification_id:
+                    # Marcar como leída en la base de datos
+                    from .models import Notification
+                    try:
+                        notification = await database_sync_to_async(Notification.objects.get)(
+                            id=notification_id,
+                            usuario=self.user
+                        )
+                        if not notification.leida:
+                            notification.leida = True
+                            await database_sync_to_async(notification.save)(update_fields=['leida'])
+                        
+                        # Confirmar al cliente
+                        await self.send(text_data=json.dumps({
+                            "type": "notification_marked_read",
+                            "notification_id": notification_id
+                        }))
+                    except Notification.DoesNotExist:
+                        pass
+        except json.JSONDecodeError:
+            pass
+
     async def send_notification(self, event):
         """
         Maneja los eventos enviados vía channel_layer.group_send y los reenvía al cliente.

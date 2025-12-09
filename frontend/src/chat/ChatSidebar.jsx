@@ -1,6 +1,5 @@
-// src/chat/ChatSidebar.jsx
 import React, { useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, ChevronLeft, RefreshCw } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import API from "../api/axiosInstance";
 import "./Chat.css";
@@ -15,15 +14,17 @@ const ChatSidebar = ({
     loadingAgents,
     agentsError,
     isAgent,
+    onBack // onToggleSidebar no se usa, se puede quitar si no se necesita en otro lado
 }) => {
     const { user } = useAuth();
+    const [collapsedSections, setCollapsedSections] = useState({});
 
     const handleSelectAgent = async (agent) => {
         try {
             const response = await API.post("/chat/directo/iniciar/", {
                 target_user_id: agent.id,
             });
-            const directChatRoom = response.data;
+            const directChatRoom = { type: 'room', data: response.data };
             setSelectedChat(directChatRoom);
             reloadChats();
         } catch (error) {
@@ -35,20 +36,88 @@ const ChatSidebar = ({
         }
     };
 
+    const getChatAvatar = (chat) => {
+        if (chat.type === 'TICKET') {
+            const solicitante = chat.participants?.find(p => p.role === 'solicitante');
+            return `https://ui-avatars.com/api/?name=${solicitante?.username || 'T'}&background=3498db&color=ffffff`;
+        } else if (chat.type === 'DIRECTO') {
+            const otherUser = chat.participants?.find(p => p.id !== user.id);
+            return `https://ui-avatars.com/api/?name=${otherUser?.username || 'D'}&background=27ae60&color=ffffff`;
+        }
+        return `https://ui-avatars.com/api/?name=C&background=95a5a6&color=ffffff`;
+    };
+
+    const getChatTitle = (chat) => {
+        if (chat.type === 'TICKET') {
+            return `Ticket #${chat.ticket_id}`;
+        } else if (chat.type === 'DIRECTO') {
+            const otherUser = chat.participants?.find(p => p.id !== user.id);
+            return otherUser?.username || 'Chat directo';
+        }
+        return 'Chat';
+    };
+
+    const getLastMessage = (chat) => {
+        if (chat.messages?.length > 0) {
+            const lastMsg = chat.messages[chat.messages.length - 1];
+            if (lastMsg.message_type === 'image') {
+                return '📷 Imagen';
+            } else if (lastMsg.message_type === 'file') {
+                return '📎 Archivo';
+            }
+            return lastMsg.content?.substring(0, 50) + (lastMsg.content?.length > 50 ? '...' : '') || '...';
+        }
+        return 'No hay mensajes...';
+    };
+
+    const getLastMessageTime = (chat) => {
+        if (chat.messages?.length > 0) {
+            const lastMsg = chat.messages[chat.messages.length - 1];
+            const date = new Date(lastMsg.timestamp);
+            const now = new Date();
+            const diffMs = now - date;
+            const diffMins = Math.floor(diffMs / (1000 * 60));
+
+            if (diffMins < 60) return `${diffMins}m`;
+            if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h`;
+            return `${Math.floor(diffMins / 1440)}d`;
+        }
+        return '';
+    };
+
+    const toggleSection = (section) => {
+        setCollapsedSections(prev => ({
+            ...prev,
+            [section]: !prev[section]
+        }));
+    };
+
     return (
         <div className="chat-sidebar">
+            {/* Header responsivo */}
             <div className="chat-sidebar__header">
                 <div className="chat-sidebar__header-top">
-                    <h2 className="chat-sidebar__title">Message Center</h2>
+                    <div className="chat-sidebar__header-left">
+                        {window.innerWidth <= 768 && (
+                            <button
+                                className="chat-header__back-button"
+                                onClick={onBack}
+                            >
+                                <ChevronLeft size={24} />
+                            </button>
+                        )}
+                        <h2 className="chat-sidebar__title">Chats</h2>
+                    </div>
                     <button
                         onClick={reloadChats}
                         className="chat-sidebar__refresh-btn"
+                        title="Actualizar chats"
                     >
-                        Refresh
+                        <RefreshCw size={18} />
                     </button>
                 </div>
                 <p className="chat-sidebar__subtitle">
-                    {isAgent ? "Active agents and ticket chats" : "Your conversations"}
+                    {isAgent ? "Agentes y tickets activos" : "Tus conversaciones"}
                 </p>
             </div>
 
@@ -56,191 +125,155 @@ const ChatSidebar = ({
                 {isAgent && (
                     <>
                         {/* Agentes activos */}
-                        <div>
+                        <div className="chat-sidebar__section">
+                            <div className="chat-sidebar__section-header">
+                                <h3 className="chat-sidebar__section-title">
+                                    Agentes Activos ({activeAgents.length})
+                                </h3>
+                                <button
+                                    className="chat-sidebar__collapse-btn"
+                                    onClick={() => toggleSection('agents')}
+                                >
+                                    <ChevronDown
+                                        className={`chat-sidebar__collapse-icon ${collapsedSections.agents ? 'collapsed' : ''}`}
+                                    />
+                                </button>
+                            </div>
+
+                            {!collapsedSections.agents && (
+                                <>
+                                    {loadingAgents && (
+                                        <div className="chat-sidebar__loading">
+                                            <div className="chat-sidebar__spinner"></div>
+                                        </div>
+                                    )}
+
+                                    {agentsError && (
+                                        <p className="chat-sidebar__error">{agentsError}</p>
+                                    )}
+
+                                    {activeAgents.length === 0 && !loadingAgents && !agentsError && (
+                                        <p className="chat-list__empty">No hay agentes activos</p>
+                                    )}
+
+                                    <div className="agents-list">
+                                        {activeAgents.map((agent) => (
+                                            <div
+                                                key={agent.id ?? agent.username}
+                                                className="agent-item"
+                                                onClick={() => handleSelectAgent(agent)}
+                                            >
+                                                <div className="agent-item__avatar">
+                                                    <img
+                                                        src={`https://ui-avatars.com/api/?name=${agent.username}&background=27ae60&color=ffffff`}
+                                                        alt={agent.username}
+                                                    />
+                                                    <span className="agent-item__dot agent-item__dot--online"></span>
+                                                </div>
+                                                <div className="agent-item__info">
+                                                    <span className="agent-item__name">
+                                                        {agent.first_name && agent.last_name
+                                                            ? `${agent.first_name} ${agent.last_name}`
+                                                            : agent.username}
+                                                    </span>
+                                                    <div className="agent-item__meta">
+                                                        <span className="agent-item__role">
+                                                            {agent.role ? agent.role.replace('agente_', '') : 'Agente'}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </>
+                            )}
+                        </div>
+
+                        {/* Chat grupal */}
+                        <div className="chat-sidebar__section">
+                            <h3 className="chat-sidebar__section-title">Chat Grupal</h3>
                             <div
-                                style={{
-                                    display: "flex",
-                                    justifyContent: "space-between",
-                                    alignItems: "center",
-                                    marginBottom: 8,
+                                className={`group-chat-item ${selectedChat?.type === "group" ? "group-chat-item--selected" : ""}`}
+                                onClick={() => {
+                                    setSelectedChat({ type: "group", data: { name: "HR" } });
                                 }}
                             >
-                                <h3 className="chat-sidebar__section-title">
-                                    Active Agents
-                                </h3>
-                                {loadingAgents && (
-                                    <div className="chat-sidebar__spinner" />
-                                )}
-                            </div>
-
-                            {agentsError && (
-                                <p style={{ fontSize: "0.75rem", color: "#ff003c" }}>
-                                    {agentsError}
-                                </p>
-                            )}
-
-                            {activeAgents.length === 0 && !loadingAgents && !agentsError && (
-                                <p className="chat-list__empty">
-                                    No active agents at the moment.
-                                </p>
-                            )}
-
-                            <ul style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                                {activeAgents.map((agent) => (
-                                    <li
-                                        key={agent.id ?? agent.username}
-                                        className="agent-item"
-                                        onClick={() => handleSelectAgent(agent)}
-                                    >
-                                        <span className="agent-item__dot agent-item__dot--online" />
-                                        <AgentInfo agent={agent} />
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
-
-                        {/* Agentes inactivos */}
-                        {inactiveAgents.length > 0 && (
-                            <CollapsibleSection title={`Offline (${inactiveAgents.length})`}>
-                                <ul
-                                    style={{
-                                        display: "flex",
-                                        flexDirection: "column",
-                                        gap: 8,
-                                        marginTop: 8,
-                                    }}
-                                >
-                                    {inactiveAgents.map((agent) => (
-                                        <li
-                                            key={agent.id ?? agent.username}
-                                            className="agent-item"
-                                            style={{ cursor: "default" }}
-                                        >
-                                            <span className="agent-item__dot agent-item__dot--offline" />
-                                            <AgentInfo agent={agent} />
-                                        </li>
-                                    ))}
-                                </ul>
-                            </CollapsibleSection>
-                        )}
-
-                        {/* Group chat */}
-                        <div>
-                            <h3 className="chat-sidebar__section-title">Group Chat</h3>
-                            <div
-                                className={
-                                    "group-chat-item " +
-                                    (selectedChat?.type === "group"
-                                        ? "group-chat-item--selected"
-                                        : "")
-                                }
-                                onClick={() =>
-                                    setSelectedChat({
-                                        type: "group",
-                                        group_name: "HR",
-                                    })
-                                }
-                            >
-                                <p className="group-chat-item__title">
-                                    HR – Group Chat
-                                </p>
-                                <p className="group-chat-item__subtitle">
-                                    Conversation between agents
-                                </p>
+                                <div className="group-chat-item__avatar">
+                                    <div className="group-avatar">👥</div>
+                                </div>
+                                <div className="group-chat-item__info">
+                                    <p className="group-chat-item__title">HR - Grupo</p>
+                                    <p className="group-chat-item__subtitle">Conversación entre agentes</p>
+                                </div>
                             </div>
                         </div>
 
-                        <div className="chat-sidebar__separator" />
+                        <div className="chat-sidebar__separator"></div>
                     </>
                 )}
 
                 {/* Lista de chats */}
-                <div>
-                    <h3 className="chat-sidebar__section-title">
-                        {isAgent ? "All Chats" : "Your Conversations"}
-                    </h3>
+                <div className="chat-sidebar__section">
+                    <div className="chat-sidebar__section-header">
+                        <h3 className="chat-sidebar__section-title">
+                            {isAgent ? "Todos los Chats" : "Conversaciones"}
+                        </h3>
+                        <span className="chat-sidebar__count">{chats.length}</span>
+                    </div>
 
-                    {chats.length === 0 && (
-                        <p className="chat-list__empty">No active chats.</p>
+                    {chats.length === 0 ? (
+                        <p className="chat-list__empty">
+                            {isAgent ? "No hay chats activos" : "No tienes conversaciones"}
+                        </p>
+                    ) : (
+                        <div className="chat-list">
+                            {chats.map((chat) => {
+                                const isSelected = selectedChat?.type === 'room' && selectedChat.data.id === chat.id;
+
+                                return (
+                                    <div
+                                        key={chat.id}
+                                        className={`chat-item ${isSelected ? "chat-item--selected" : ""}`}
+                                        onClick={() => {
+                                            setSelectedChat({ type: 'room', data: chat });
+                                        }}
+                                    >
+                                        <div className="chat-item__avatar">
+                                            <img src={getChatAvatar(chat)} alt={getChatTitle(chat)} />
+                                            {(chat.type === 'TICKET' && chat.ticket_estado === 'En Proceso') ||
+                                                (chat.type === 'DIRECTO') ? (
+                                                <span className="chat-item__status chat-item__status--online"></span>
+                                            ) : (
+                                                <span className="chat-item__status chat-item__status--offline"></span>
+                                            )}
+                                        </div>
+                                        <div className="chat-item__info">
+                                            <div className="chat-item__header">
+                                                <h4 className="chat-item__title">{getChatTitle(chat)}</h4>
+                                                <span className="chat-item__time">{getLastMessageTime(chat)}</span>
+                                            </div>
+                                            <div className="chat-item__preview">
+                                                <p className="chat-item__last-message">{getLastMessage(chat)}</p>
+                                                {chat.unread_count > 0 && (
+                                                    <span className="chat-item__badge">{chat.unread_count}</span>
+                                                )}
+                                            </div>
+                                            <div className="chat-item__footer">
+                                                {chat.type === 'TICKET' && (
+                                                    <span className={`chat-item__type chat-item__type--${chat.ticket_estado === 'En Proceso' ? 'process' : 'default'}`}>
+                                                        {chat.ticket_estado}
+                                                    </span>
+                                                )}
+                                                {chat.type === 'DIRECTO' && (
+                                                    <span className="chat-item__type chat-item__type--direct">Directo</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
                     )}
-
-                    {chats.map((chat) => {
-                        if (chat.type === 'TICKET') {
-                            const solicitante = chat.participants.find(p => p.role === 'solicitante');
-                            const lastMsg = chat.messages && chat.messages.length ? chat.messages[chat.messages.length - 1] : null;
-
-                            return (
-                                <div
-                                    key={chat.id}
-                                    className={
-                                        "chat-item " +
-                                        (selectedChat?.id === chat.id
-                                            ? "chat-item--selected"
-                                            : "")
-                                    }
-                                    onClick={() => setSelectedChat(chat)}
-                                >
-                                    <div className="chat-item__header">
-                                        <p className="chat-item__title">
-                                            Ticket #{chat.ticket_id}
-                                        </p>
-                                        <span
-                                            className={
-                                                "chat-item__badge " +
-                                                (chat.ticket_estado === "En Proceso"
-                                                    ? "chat-item__badge--process"
-                                                    : "chat-item__badge--default")
-                                            }
-                                        >
-                                            {chat.ticket_estado}
-                                        </span>
-                                    </div>
-                                    <p className="chat-item__subtitle">
-                                        Requester: {solicitante ? solicitante.username : 'N/A'}
-                                    </p>
-                                    <p className="chat-item__last-message">
-                                        {lastMsg
-                                            ? `${lastMsg.sender_name}: ${lastMsg.content || 'Attachment'}`
-                                            : "No messages yet..."}
-                                    </p>
-                                </div>
-                            );
-                        }
-
-                        if (chat.type === 'DIRECTO') {
-                            const otherUser = chat.participants.find(p => p.id !== user.id);
-                            const lastMsg = chat.messages && chat.messages.length ? chat.messages[chat.messages.length - 1] : null;
-
-                            return (
-                                <div
-                                    key={chat.id}
-                                    className={
-                                        "chat-item " +
-                                        (selectedChat?.id === chat.id
-                                            ? "chat-item--selected"
-                                            : "")
-                                    }
-                                    onClick={() => setSelectedChat(chat)}
-                                >
-                                    <div className="chat-item__header">
-                                        <p className="chat-item__title">
-                                            {otherUser ? otherUser.username : 'Chat directo'}
-                                        </p>
-                                        <span className="chat-item__badge chat-item__badge--direct">
-                                            Directo
-                                        </span>
-                                    </div>
-                                    <p className="chat-item__last-message">
-                                        {lastMsg
-                                            ? `${lastMsg.sender_name}: ${lastMsg.content || 'Attachment'}`
-                                            : "No messages yet..."}
-                                    </p>
-                                </div>
-                            );
-                        }
-
-                        return null;
-                    })}
                 </div>
             </div>
         </div>
@@ -248,44 +281,3 @@ const ChatSidebar = ({
 };
 
 export default ChatSidebar;
-
-const AgentInfo = ({ agent }) => (
-    <div style={{ display: "flex", flexDirection: "column" }}>
-        <span className="agent-item__name">
-            {agent.first_name && agent.last_name
-                ? `${agent.first_name} ${agent.last_name}`
-                : agent.username}
-        </span>
-        <div className="agent-item__meta">
-            <span>
-                {agent.role.replace('agente_', '')}
-            </span>
-            <span>•</span>
-            <span>
-                Load: {agent.disponibilidad} ({agent.carga_trabajo})
-            </span>
-        </div>
-    </div>
-);
-
-const CollapsibleSection = ({ title, children }) => {
-    const [isOpen, setIsOpen] = useState(false);
-    return (
-        <div className="collapsible">
-            <button
-                onClick={() => setIsOpen(!isOpen)}
-                className="collapsible__btn"
-            >
-                <span>{title}</span>
-                <ChevronDown
-                    className="w-4 h-4"
-                    style={{
-                        transition: "transform 0.15s ease",
-                        transform: isOpen ? "rotate(180deg)" : "rotate(0deg)",
-                    }}
-                />
-            </button>
-            {isOpen && <div style={{ marginTop: 4 }}>{children}</div>}
-        </div>
-    );
-};

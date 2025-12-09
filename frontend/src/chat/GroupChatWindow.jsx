@@ -2,23 +2,29 @@ import React, { useState, useEffect, useCallback } from "react";
 import API from "../api/axiosInstance"; // Asegúrate que la ruta es correcta
 import ChatMessages from "./ChatMessages";
 import ChatInput from "./ChatInput";
+import ChatHeader from "./ChatHeader"; // Importamos el nuevo ChatHeader
 import ImageViewer from "./ImageViewer";
 import useGroupSocket from "../hooks/useGroupSocket";
 
-const GroupChatWindow = ({ group }) => {
+const GroupChatWindow = ({ group, onBack }) => {
     const [messages, setMessages] = useState([]);
     const [imagePreview, setImagePreview] = useState(null);
 
-    const onSocketMessage = useCallback((msg) => {
-        // Evitar duplicados: añadir solo si el mensaje no existe ya
-        setMessages((prev) => {
-            // ✅ Ignorar eventos que no son mensajes de chat (como 'typing')
-            if (!msg.id || !msg.timestamp) {
-                return prev;
-            }
-            if (prev.find(m => m.id === msg.id)) return prev;
-            return [...prev, msg];
-        });
+    const onSocketMessage = useCallback((event) => {
+        const { type, message: msg } = event;
+
+        if (type === 'chat_message_new') {
+            setMessages((prev) => {
+                if (prev.find(m => m.id === msg.id)) return prev;
+                return [...prev, msg];
+            });
+        }
+
+        if (type === 'chat_message_update') {
+            setMessages((prev) =>
+                prev.map(m => m.id === msg.id ? msg : m)
+            );
+        }
     }, []);
 
     // WebSocket grupal
@@ -36,16 +42,20 @@ const GroupChatWindow = ({ group }) => {
 
     return (
         <div className="chat-window">
-            {/* Header */}
-            <div className="group-header">
-                <h2 className="group-header__title">Chat Grupal – {group}</h2>
-                <p className="group-header__subtitle">
-                    Conversación entre agentes y administradores.
-                </p>
-            </div>
+            {/* Usamos ChatHeader para el chat grupal para consistencia y el botón de menú */}
+            <ChatHeader
+                chat={{
+                    type: 'GROUP', // Tipo interno para identificar que es un chat grupal
+                    name: group,
+                    // Puedes añadir más propiedades del grupo si las necesitas en el header
+                }}
+                onBack={onBack} // Pasa onBack
+            />
+
 
             {/* Mensajes */}
             <ChatMessages
+                setMessages={setMessages}
                 messages={messages}
                 onImageClick={(src) => setImagePreview(src)}
             />

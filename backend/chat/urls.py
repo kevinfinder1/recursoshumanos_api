@@ -10,6 +10,7 @@ from .views import (
     GroupChatSendMessageView,
     GroupChatInfoView,
     StartDirectChatView,
+    MessageDetailView,
     RepairTicketChatsView,
 )
 
@@ -36,6 +37,9 @@ urlpatterns = [
 
     # Enviar mensaje al chat (texto + archivo)
     path("rooms/<int:pk>/send/", SendMessageView.as_view(), name="chat_room_send_message"),
+
+    # Editar o eliminar un mensaje específico
+    path("messages/<int:pk>/", MessageDetailView.as_view(), name="message_detail"),
 
 
     # ===============================
