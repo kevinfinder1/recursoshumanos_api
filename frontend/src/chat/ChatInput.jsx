@@ -57,7 +57,7 @@ const ChatInput = ({ roomId, onSend, isGroup = false, groupName, wsRef }) => {
             console.log("✅ Mensaje enviado:", res?.data);
             setText("");
             setFile(null);
-            if (onSend && res?.data) onSend(res.data);
+            if (onSend && res?.data?.data) onSend(res.data.data);
         } catch (error) {
             console.error("❌ Error enviando mensaje:", error);
             alert(

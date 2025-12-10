@@ -12,9 +12,16 @@ from .views import (
     StartDirectChatView,
     MessageDetailView,
     RepairTicketChatsView,
+    AgentListView,
 )
 
 urlpatterns = [
+
+    # ===============================
+    #   NUEVO - LISTA DE AGENTES
+    # ===============================
+    path("agents/", AgentListView.as_view(), name="agent_list"),
+
 
     # ===============================
     #   CHAT POR TICKET (USER–AGENTE)

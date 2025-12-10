@@ -8,7 +8,7 @@ import "./Chat.css";
 
 const ChatLayout = () => {
     const { user } = useAuth();
-    const isAgent = user?.rol?.tipo_base === 'agente' || user?.rol?.tipo_base === 'admin';
+    const isAgent = user?.role === 'agente' || user?.role === 'admin';
 
     const [selectedChat, setSelectedChat] = useState(null);
     const [chats, setChats] = useState([]);
@@ -20,19 +20,33 @@ const ChatLayout = () => {
     const loadChats = useCallback(async () => {
         try {
             const response = await API.get("/chat/rooms/");
-            setChats(response.data.results || response.data || []);
+            let allChats = response.data.results || response.data || [];
+
+            // Solo añadir el chat grupal si el usuario es agente o admin
+            if (isAgent) {
+                const groupChat = {
+                    id: "group-hr",
+                    type: "GRUPAL",
+                    name: "HR - Grupo",
+                    messages: [],
+                };
+                allChats.unshift(groupChat);
+            }
+
+            console.log("Final chats list:", allChats);
+            setChats(allChats);
         } catch (error) {
             console.error("Error cargando chats:", error);
             setChats([]);
         }
-    }, []);
+    }, [isAgent]);
 
     const loadAgents = useCallback(async () => {
         if (!isAgent) return;
         setLoadingAgents(true);
         setAgentsError(null);
         try {
-            const response = await API.get("/users/agents/");
+            const response = await API.get("/chat/agents/");
             const allAgents = response.data.results || response.data || [];
             setActiveAgents(allAgents);
             setInactiveAgents([]);
@@ -90,17 +104,17 @@ const ChatLayout = () => {
             {/* Ventana de chat - visible cuando hay chat seleccionado */}
             <div className={`chat-main-content ${selectedChat ? 'chat-selected' : 'no-chat-selected'}`}>
                 {selectedChat ? (
-                    selectedChat.type === 'room' ? (
+                    selectedChat.data.type === 'GRUPAL' ? (
+                        <GroupChatWindow
+                            group={selectedChat.data.id}
+                            onBack={handleBackToSidebar}
+                        />
+                    ) : (
                         <ChatWindow
                             chat={selectedChat.data}
                             onBack={handleBackToSidebar}
                         />
-                    ) : selectedChat.type === 'group' ? (
-                        <GroupChatWindow
-                            group={selectedChat.data.name}
-                            onBack={handleBackToSidebar}
-                        />
-                    ) : null
+                    )
                 ) : (
                     <div className="chat-empty">
                         <div className="chat-empty__card">

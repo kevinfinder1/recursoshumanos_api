@@ -5,7 +5,8 @@ from .models import (
     SLA,
     AgentPerformance,
     SystemLog,
-    ConfiguracionSistema
+    ConfiguracionSistema,
+    RotacionProgramada
 )
 
 # =====================================================
@@ -113,3 +114,17 @@ class ConfiguracionSistemaAdmin(admin.ModelAdmin):
             'fields': ('actualizado_en',)
         })
     )
+
+
+# =====================================================
+# ROTACIÓN DE PERSONAL
+# =====================================================
+@admin.register(RotacionProgramada)
+class RotacionProgramadaAdmin(admin.ModelAdmin):
+    list_display = ('agente', 'rol_destino', 'fecha_inicio', 'agente_reemplazo', 'ejecutada')
+    list_filter = ('ejecutada', 'fecha_inicio', 'rol_destino')
+    search_fields = ('agente__username', 'agente__email', 'agente_reemplazo__username')
+    ordering = ('fecha_inicio',)
+    autocomplete_fields = ['agente', 'agente_reemplazo'] # Requiere que UserAdmin tenga search_fields configurado
+    
+    date_hierarchy = 'fecha_inicio'

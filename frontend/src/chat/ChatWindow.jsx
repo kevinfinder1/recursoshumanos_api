@@ -7,7 +7,7 @@ import ImageViewer from "./ImageViewer";
 import API from "../api/axiosInstance";
 import useChatSocket from "../hooks/useChatSocket";
 
-const ChatWindow = ({ chat, onBack }) => {
+const ChatWindow = ({ chat, onBack, currentUser }) => {
     const [messages, setMessages] = useState([]);
     const [imagePreview, setImagePreview] = useState(null);
 
@@ -57,7 +57,7 @@ const ChatWindow = ({ chat, onBack }) => {
 
     return (
         <div className="chat-window">
-            <ChatHeader chat={chat} onBack={onBack} /> {/* Pasa onBack al header */}
+            <ChatHeader chat={chat} onBack={onBack} currentUser={currentUser} /> {/* Pasa onBack y currentUser al header */}
             <ChatMessages
                 roomId={chat.id} // ✅ Pasar el ID de la sala para la paginación
                 setMessages={setMessages} // Pasamos la función para actualizar el estado

@@ -14,7 +14,7 @@ const ChatSidebar = ({
     loadingAgents,
     agentsError,
     isAgent,
-    onBack // onToggleSidebar no se usa, se puede quitar si no se necesita en otro lado
+    onBack
 }) => {
     const { user } = useAuth();
     const [collapsedSections, setCollapsedSections] = useState({});
@@ -41,8 +41,10 @@ const ChatSidebar = ({
             const solicitante = chat.participants?.find(p => p.role === 'solicitante');
             return `https://ui-avatars.com/api/?name=${solicitante?.username || 'T'}&background=3498db&color=ffffff`;
         } else if (chat.type === 'DIRECTO') {
-            const otherUser = chat.participants?.find(p => p.id !== user.id);
+            const otherUser = chat.participants?.find(p => p.id !== user?.id);
             return `https://ui-avatars.com/api/?name=${otherUser?.username || 'D'}&background=27ae60&color=ffffff`;
+        } else if (chat.type === 'GRUPAL') {
+            return `https://ui-avatars.com/api/?name=${chat.name || 'G'}&background=95a5a6&color=ffffff`;
         }
         return `https://ui-avatars.com/api/?name=C&background=95a5a6&color=ffffff`;
     };
@@ -51,8 +53,10 @@ const ChatSidebar = ({
         if (chat.type === 'TICKET') {
             return `Ticket #${chat.ticket_id}`;
         } else if (chat.type === 'DIRECTO') {
-            const otherUser = chat.participants?.find(p => p.id !== user.id);
+            const otherUser = chat.participants?.find(p => p.id !== user?.id);
             return otherUser?.username || 'Chat directo';
+        } else if (chat.type === 'GRUPAL') {
+            return chat.name || 'Chat Grupal';
         }
         return 'Chat';
     };
@@ -94,7 +98,6 @@ const ChatSidebar = ({
 
     return (
         <div className="chat-sidebar">
-            {/* Header responsivo */}
             <div className="chat-sidebar__header">
                 <div className="chat-sidebar__header-top">
                     <div className="chat-sidebar__header-left">
@@ -189,45 +192,31 @@ const ChatSidebar = ({
                             )}
                         </div>
 
-                        {/* Chat grupal */}
-                        <div className="chat-sidebar__section">
-                            <h3 className="chat-sidebar__section-title">Chat Grupal</h3>
-                            <div
-                                className={`group-chat-item ${selectedChat?.type === "group" ? "group-chat-item--selected" : ""}`}
-                                onClick={() => {
-                                    setSelectedChat({ type: "group", data: { name: "HR" } });
-                                }}
-                            >
-                                <div className="group-chat-item__avatar">
-                                    <div className="group-avatar">👥</div>
-                                </div>
-                                <div className="group-chat-item__info">
-                                    <p className="group-chat-item__title">HR - Grupo</p>
-                                    <p className="group-chat-item__subtitle">Conversación entre agentes</p>
-                                </div>
-                            </div>
-                        </div>
-
                         <div className="chat-sidebar__separator"></div>
                     </>
                 )}
 
-                {/* Lista de chats */}
+                {/* Lista de chats (incluye Chat Grupal para agentes) */}
                 <div className="chat-sidebar__section">
                     <div className="chat-sidebar__section-header">
                         <h3 className="chat-sidebar__section-title">
                             {isAgent ? "Todos los Chats" : "Conversaciones"}
                         </h3>
-                        <span className="chat-sidebar__count">{chats.length}</span>
+                        <span className="chat-sidebar__count">
+                            {/* Solo contar chats dinámicos, no el chat grupal */}
+                            {chats.length}
+                        </span>
                     </div>
 
-                    {chats.length === 0 ? (
-                        <p className="chat-list__empty">
-                            {isAgent ? "No hay chats activos" : "No tienes conversaciones"}
-                        </p>
-                    ) : (
-                        <div className="chat-list">
-                            {chats.map((chat) => {
+                    <div className="chat-list">
+                        {/* Mensaje cuando no hay chats dinámicos */}
+                        {chats.length === 0 ? (
+                            <p className="chat-list__empty">
+                                {isAgent ? "No hay chats activos" : "No tienes conversaciones"}
+                            </p>
+                        ) : (
+                            /* Chats dinámicos */
+                            chats.map((chat) => {
                                 const isSelected = selectedChat?.type === 'room' && selectedChat.data.id === chat.id;
 
                                 return (
@@ -267,13 +256,16 @@ const ChatSidebar = ({
                                                 {chat.type === 'DIRECTO' && (
                                                     <span className="chat-item__type chat-item__type--direct">Directo</span>
                                                 )}
+                                                {chat.type === 'GRUPAL' && (
+                                                    <span className="chat-item__type chat-item__type--default">Grupal</span>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
                                 );
-                            })}
-                        </div>
-                    )}
+                            })
+                        )}
+                    </div>
                 </div>
             </div>
         </div>

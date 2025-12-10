@@ -29,6 +29,7 @@ import CategoriesListPage from "../modules/admin/pages/CategoriesListPage";
 import TicketsListPage from "../modules/admin/pages/TicketsListPage";
 import ReportsPage from "../modules/admin/pages/ReportsPage";
 import ConfiguracionPage from "../modules/admin/pages/ConfiguracionPage";
+import AdminRotacionesPage from "../modules/admin/pages/AdminRotacionesPage";
 
 import PrivateRoute from "./PrivateRoute";
 
@@ -116,6 +117,9 @@ const AppRouter = () => {
 
                 {/* Gestión de Categorías */}
                 <Route path="categorias" element={<CategoriesListPage />} />
+
+                {/* Gestión de Rotaciones */}
+                <Route path="rotaciones" element={<AdminRotacionesPage />} />
 
                 {/* Gestión de Tickets */}
                 <Route path="tickets" element={<TicketsListPage />} />

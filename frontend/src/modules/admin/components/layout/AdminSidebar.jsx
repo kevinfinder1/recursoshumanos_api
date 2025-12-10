@@ -8,7 +8,8 @@ import {
     FaUsers,
     FaChartBar,
     FaCog,
-    FaTimes
+    FaTimes,
+    FaExchangeAlt
 } from 'react-icons/fa';
 import './AdminSidebar.css';
 
@@ -18,6 +19,7 @@ const AdminSidebar = ({ isOpen, toggleSidebar }) => {
         { path: '/admin/tickets', icon: <FaTicketAlt />, label: 'Tickets' },
         { path: '/admin/categorias', icon: <FaTags />, label: 'Categorías' },
         { path: '/admin/usuarios', icon: <FaUsers />, label: 'Usuarios' },
+        { path: '/admin/rotaciones', icon: <FaExchangeAlt />, label: 'Rotaciones' },
         { path: '/admin/reportes', icon: <FaChartBar />, label: 'Reportes' },
         { path: '/admin/configuracion', icon: <FaCog />, label: 'Configuración' },
     ];

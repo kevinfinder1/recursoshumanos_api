@@ -70,6 +70,25 @@ services:
         condition: service_started
     restart: always
 
+  scheduler:
+    build: ./backend
+    container_name: hr_scheduler
+    command: python scheduler.py
+    volumes:
+      - ./backend:/app
+    environment:
+      - DEBUG=False
+      - DB_ENGINE=postgresql
+      - DB_NAME=hr_tickets_db
+      - DB_USER=hr_user
+      - DB_PASSWORD=Nintendokevin123
+      - DB_HOST=db
+      - DB_PORT=5432
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: always
+
   celery:
     build: ./backend
     container_name: hr_celery

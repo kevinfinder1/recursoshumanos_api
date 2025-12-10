@@ -1,7 +1,7 @@
 # chat/views.py
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from rest_framework import generics, permissions
+from rest_framework import generics, permissions, serializers
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.conf import settings
@@ -16,6 +16,35 @@ from .serializers import ChatRoomSerializer, MessageSerializer
 from .notification_utils import create_notifications_for_message
 from .permissions import IsAgentOrAdmin
 from tickets.models import Ticket
+
+User = get_user_model()
+
+
+# ============================================================
+#  SERIALIZER Y VISTA PARA LISTAR AGENTES
+# ============================================================
+class AgentSerializer(serializers.ModelSerializer):
+    """Serializador simple para mostrar información de agentes."""
+    role = serializers.CharField(source='rol.nombre_clave', read_only=True)
+
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'first_name', 'last_name', 'role']
+
+class AgentListView(generics.ListAPIView):
+    """
+    Devuelve una lista de todos los usuarios que son agentes o administradores.
+    Accesible solo por otros agentes/administradores para iniciar chats.
+    """
+    serializer_class = AgentSerializer
+    permission_classes = [permissions.IsAuthenticated, IsAgentOrAdmin]
+
+    def get_queryset(self):
+        # Filtra usuarios cuyo rol base sea 'agente' o 'admin'
+        # y excluye al usuario que hace la petición.
+        return User.objects.filter(
+            Q(rol__tipo_base='agente') | Q(rol__tipo_base='admin')
+        ).exclude(id=self.request.user.id).select_related('rol').order_by('username')
 
 
 #  INICIAR/OBTENER CHAT DIRECTO ENTRE AGENTES

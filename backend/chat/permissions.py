@@ -16,4 +16,7 @@ class IsAgentOrAdmin(BasePermission):
         if not request.user.rol:
             return False
             
+        # CORRECCIÓN: En el backend (Django ORM), 'rol' es una relación al objeto Role.
+        # El error anterior fue confundir el objeto del frontend (donde role es string) con el del backend.
+        # Accedemos a la relación 'rol' para verificar el tipo.
         return request.user.rol.tipo_base in ['agente', 'admin']

@@ -26,6 +26,9 @@ from .views.report_views import (
     GenerarReporteRendimientoView,
     GenerarReporteCategoriasView
 )
+from .views.rotation_views import (
+    RotacionProgramadaViewSet
+)
 
 # 1. Crear un router para registrar las ViewSets
 router = DefaultRouter()
@@ -37,6 +40,7 @@ router.register(r'categorias', CategoryAdminViewSet, basename='admin-category-li
 router.register(r'prioridades', PriorityViewSet, basename='admin-prioridades')
 router.register(r'slas', SLAViewSet, basename='admin-slas')
 router.register(r'logs', SystemLogViewSet, basename='admin-logs')
+router.register(r'rotaciones', RotacionProgramadaViewSet, basename='admin-rotaciones')
 
 
 urlpatterns = [

@@ -157,3 +157,40 @@ class ConfiguracionSistema(models.Model):
 
     def __str__(self):
         return self.nombre_empresa
+
+
+# =====================================================
+# ROTACIÓN DE PERSONAL (AUTOMATIZACIÓN)
+# =====================================================
+class RotacionProgramada(models.Model):
+    agente = models.ForeignKey(
+        User, 
+        on_delete=models.CASCADE, 
+        related_name='rotaciones_programadas',
+        help_text="El agente que va a cambiar de rol."
+    )
+    rol_destino = models.ForeignKey(
+        'users.Rol', 
+        on_delete=models.PROTECT, 
+        verbose_name="Nuevo Rol Asignado"
+    )
+    fecha_inicio = models.DateField(
+        help_text="Fecha en la que se ejecutará el cambio (a las 00:00)."
+    )
+    # El relevo es obligatorio para no dejar tickets huérfanos
+    agente_reemplazo = models.ForeignKey(
+        User, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=False, # Obligatorio en el admin
+        related_name='reemplazos_asignados',
+        verbose_name="Agente de Relevo (Hereda Tickets)",
+        help_text="IMPORTANTE: Usuario que recibirá automáticamente los tickets ABIERTOS del agente saliente."
+    )
+    ejecutada = models.BooleanField(default=False, help_text="Indica si el sistema ya procesó este cambio.")
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Rotación de Personal"
+        verbose_name_plural = "Rotaciones Programadas"
+        ordering = ['fecha_inicio']

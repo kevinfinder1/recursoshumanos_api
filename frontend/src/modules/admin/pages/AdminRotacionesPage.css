@@ -1,0 +1,143 @@
+/* frontend/src/modules/admin/pages/AdminRotacionesPage.css */
+.admin-page-container {
+    padding: 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.admin-page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 25px;
+}
+
+.admin-page-header h2 {
+    margin: 0;
+    color: #1f2937;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.subtitle {
+    color: #6b7280;
+    margin: 5px 0 0 0;
+    font-size: 0.9rem;
+}
+
+.btn-primary {
+    background-color: #1a73e8;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 500;
+    transition: background 0.2s;
+}
+
+.btn-primary:hover {
+    background-color: #1557b0;
+}
+
+.table-container {
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+    overflow: hidden;
+}
+
+.admin-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.admin-table th {
+    background: #f9fafb;
+    padding: 15px;
+    text-align: left;
+    font-weight: 600;
+    color: #374151;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.admin-table td {
+    padding: 15px;
+    border-bottom: 1px solid #e5e7eb;
+    color: #4b5563;
+}
+
+.row-ejecutada {
+    background-color: #f9fafb;
+    opacity: 0.8;
+}
+
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.badge-success {
+    background-color: #d1fae5;
+    color: #065f46;
+}
+
+.badge-pending {
+    background-color: #fff3cd;
+    color: #856404;
+}
+
+.rol-tag {
+    background: #e0f2f1;
+    color: #00695c;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+}
+
+.relevo-tag {
+    color: #d97706;
+    font-weight: 500;
+}
+
+.btn-icon {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 6px;
+    border-radius: 4px;
+    transition: background 0.2s;
+}
+
+.btn-delete {
+    color: #ef4444;
+}
+
+.btn-delete:hover {
+    background: #fee2e2;
+}
+
+.font-mono {
+    font-family: monospace;
+    font-size: 0.95rem;
+}
+
+.font-bold {
+    font-weight: 600;
+    color: #111827;
+}
+
+.empty-state {
+    padding: 40px;
+    text-align: center;
+    color: #9ca3af;
+}

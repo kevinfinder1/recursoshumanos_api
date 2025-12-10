@@ -36,8 +36,14 @@ const GroupChatWindow = ({ group, onBack }) => {
     }, [group]);
 
     const loadMessages = async () => {
-        const res = await API.get(`/chat/group/${group}/messages/`);
-        setMessages(res.data.messages);
+        try {
+            const res = await API.get(`/chat/group/${group}/messages/`);
+            // Aseguramos que siempre se asigne un array, incluso si la respuesta no es la esperada.
+            setMessages(res.data?.messages || []);
+        } catch (error) {
+            console.error(`❌ Error cargando mensajes para el grupo ${group}:`, error);
+            setMessages([]); // En caso de error, mostrar una lista vacía.
+        }
     };
 
     return (

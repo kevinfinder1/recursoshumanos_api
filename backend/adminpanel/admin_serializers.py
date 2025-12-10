@@ -4,7 +4,7 @@ from django.utils import timezone
 from tickets.models import Ticket
 from users.models import User, Rol, Area  # Importar Rol y Area
 from django.db.models import Avg, Q
-from .models import AgentPerformance, Category, Priority, SLA, ConfiguracionSistema, SystemLog
+from .models import AgentPerformance, Category, Priority, SLA, ConfiguracionSistema, SystemLog, RotacionProgramada
 
 
 class AdminDashboardMetricsSerializer(serializers.Serializer):
@@ -516,3 +516,25 @@ class ConfiguracionSistemaSerializer(serializers.ModelSerializer):
             'mensaje_auto_respuesta', 'color_primario', 'horario_laboral',
             'actualizado_en'
         ]
+
+
+class RotacionProgramadaSerializer(serializers.ModelSerializer):
+    agente_nombre = serializers.CharField(source='agente.username', read_only=True)
+    rol_destino_nombre = serializers.CharField(source='rol_destino.nombre_visible', read_only=True)
+    agente_reemplazo_nombre = serializers.CharField(source='agente_reemplazo.username', read_only=True)
+
+    class Meta:
+        model = RotacionProgramada
+        fields = [
+            'id', 'agente', 'agente_nombre', 
+            'rol_destino', 'rol_destino_nombre', 
+            'fecha_inicio', 
+            'agente_reemplazo', 'agente_reemplazo_nombre', 
+            'ejecutada', 'creado_en'
+        ]
+        read_only_fields = ['ejecutada', 'creado_en']
+
+    def validate(self, data):
+        if data.get('agente') == data.get('agente_reemplazo'):
+            raise serializers.ValidationError("El agente saliente y el de relevo no pueden ser la misma persona.")
+        return data
