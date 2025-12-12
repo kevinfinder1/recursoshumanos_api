@@ -22,7 +22,7 @@ export const adminCategoriesApi = {
 
     // Actualizar categoría - ENDPOINT EXISTENTE
     actualizarCategoria: async (id, datosCategoria) => {
-        const response = await API.put(`/admin/categorias/${id}/`, datosCategoria);
+        const response = await API.patch(`/admin/categorias/${id}/`, datosCategoria);
         return response.data;
     },
 

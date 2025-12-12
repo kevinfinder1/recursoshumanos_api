@@ -1,4 +1,4 @@
-# admin_views.py
+# adminpanel/views/admin_views.py
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
@@ -10,32 +10,45 @@ from django.utils import timezone
 from django.http import HttpResponse
 from django.db.models import Count, Avg, Q, F, ExpressionWrapper, DurationField
 from datetime import timedelta
+import openpyxl
+from openpyxl.styles import Font, PatternFill
+from datetime import datetime
 
-from users.models import User, Rol, Area # Importar Rol y Area
-from tickets.models import Ticket, CategoriaPrincipal # Ya se importa aquí
+from users.models import User, Rol, Area
+from tickets.models import Ticket, CategoriaPrincipal
 from ..models import Priority, AgentPerformance, Category, SystemLog
-from .services import UserValidationService  # 👈 IMPORTAR NUEVO SERVICIO
-from ..permissions import IsAdminRole # 👈 Importar el permiso personalizado
+from ..permissions import IsAdminRole
 from ..admin_serializers import (
-    AdminDashboardMetricsSerializer, AdminAgentPerformanceSerializer, AdminAgentCreateUpdateSerializer, 
-    CategorySerializer, AdminUserListSerializer, CategoriaPrincipalSerializer, AreaSerializer, RolAdminSerializer,
-    PrioritySerializer
+    AdminDashboardMetricsSerializer, AdminAgentPerformanceSerializer, 
+    AdminAgentCreateUpdateSerializer, CategorySerializer, AdminUserListSerializer, 
+    CategoriaPrincipalSerializer, AreaSerializer, RolAdminSerializer,
+    PrioritySerializer, AdminTicketSerializer
 )
-
+from ..utils_filters import filtrar_tickets  # 👈 IMPORTAR FILTRO UNIVERSAL
+from ..services import UserValidationService  # 👈 Importar servicio de validación
 
 class AdminDashboardView(APIView):
-    permission_classes = [IsAuthenticated, IsAdminRole] # 👈 Usar el permiso personalizado
+    permission_classes = [IsAuthenticated, IsAdminRole]
 
     def get(self, request):
+        data = self.get_dashboard_data(request)
+        serializer = AdminDashboardMetricsSerializer(data)
+        return Response(serializer.data)
+
+    @staticmethod
+    def get_dashboard_data(request):
         # Obtener el rango de fechas desde los parámetros GET
         rango = request.query_params.get('rango', 'total')
-        categoria_id = request.query_params.get('categoria')  # 👈 NUEVO FILTRO
+        categoria_id = request.query_params.get('categoria')
         hoy = timezone.now().date()
         
-        # Aplicar filtro de rango de fechas universal
-        tickets_filtrados = self.get_tickets_in_range(rango)
+        # Usar filtro universal como base
+        tickets_filtrados = filtrar_tickets(request)
+        
+        # Aplicar filtro de rango adicional
+        tickets_filtrados = AdminDashboardView.get_tickets_in_range(tickets_filtrados, rango)
 
-        # 👈 FILTRAR POR CATEGORÍA SI SE ESPECIFICA
+        # Filtrar por categoría si se especifica
         if categoria_id:
             tickets_filtrados = tickets_filtrados.filter(categoria_principal_id=categoria_id)
 
@@ -51,12 +64,14 @@ class AdminDashboardView(APIView):
             
             tickets_atrasados=Count('id', filter=Q(
                 estado__in=["Abierto", "En Proceso"],
-                fecha_creacion__lt=timezone.now() - ExpressionWrapper(F('tiempo_estimado_resolucion') * timedelta(hours=1), output_field=DurationField())
+                fecha_creacion__lt=timezone.now() - ExpressionWrapper(
+                    F('tiempo_estimado_resolucion') * timedelta(hours=1), 
+                    output_field=DurationField()
+                )
             )),
             
             promedio_rating=Avg('rating', filter=Q(rating__isnull=False)),
             
-            # 🎯 CORRECCIÓN: Cálculo correcto del tiempo de resolución
             tiempo_promedio_resolucion=Avg(
                 F('fecha_cierre') - F('fecha_creacion'),
                 filter=Q(fecha_cierre__isnull=False)
@@ -64,25 +79,41 @@ class AdminDashboardView(APIView):
         )
 
         # Convertir timedelta a horas
-        tiempo_prom_resolucion_horas = (metricas['tiempo_promedio_resolucion'].total_seconds() / 3600) if metricas['tiempo_promedio_resolucion'] else 0
+        tiempo_prom_resolucion = metricas.get('tiempo_promedio_resolucion')
+        if tiempo_prom_resolucion:
+            tiempo_prom_resolucion_horas = tiempo_prom_resolucion.total_seconds() / 3600
+        else:
+            tiempo_prom_resolucion_horas = 0
 
         # =============================
         # RATING POR CATEGORÍA
         # =============================
-        rating_por_categoria_qs = tickets_filtrados.filter(categoria_principal__isnull=False, rating__isnull=False)\
-            .values('categoria_principal__nombre')\
-            .annotate(promedio=Avg('rating'))\
-            .order_by('-promedio')
-        rating_por_categoria = {item['categoria_principal__nombre']: round(item['promedio'], 2) for item in rating_por_categoria_qs}
+        rating_por_categoria_qs = tickets_filtrados.filter(
+            categoria_principal__isnull=False, 
+            rating__isnull=False
+        ).values('categoria_principal__nombre').annotate(
+            promedio=Avg('rating')
+        ).order_by('-promedio')
+        
+        rating_por_categoria = {
+            item['categoria_principal__nombre']: round(item['promedio'], 2) 
+            for item in rating_por_categoria_qs
+        }
 
         # =============================
         # RATING POR AGENTE
         # =============================
-        rating_por_agente_qs = tickets_filtrados.filter(agente__isnull=False, rating__isnull=False)\
-            .values('agente__username')\
-            .annotate(promedio=Avg('rating'))\
-            .order_by('-promedio')
-        rating_por_agente = {item['agente__username']: round(item['promedio'], 2) for item in rating_por_agente_qs}
+        rating_por_agente_qs = tickets_filtrados.filter(
+            agente__isnull=False, 
+            rating__isnull=False
+        ).values('agente__username').annotate(
+            promedio=Avg('rating')
+        ).order_by('-promedio')
+        
+        rating_por_agente = {
+            item['agente__username']: round(item['promedio'], 2) 
+            for item in rating_por_agente_qs
+        }
 
         # =============================
         # TICKETS POR PRIORIDAD
@@ -90,7 +121,11 @@ class AdminDashboardView(APIView):
         prioridad_stats = tickets_filtrados.values(
             "prioridad"
         ).annotate(total=Count("id")).order_by()
-        tickets_por_prioridad = {item["prioridad"]: item["total"] for item in prioridad_stats if item["prioridad"]}
+        
+        tickets_por_prioridad = {
+            item["prioridad"] or "Sin Prioridad": item["total"] 
+            for item in prioridad_stats
+        }
 
         # =============================
         # TICKETS POR CATEGORÍA
@@ -98,7 +133,11 @@ class AdminDashboardView(APIView):
         categoria_stats = tickets_filtrados.values(
             "categoria_principal__nombre"
         ).annotate(total=Count("id")).order_by()
-        tickets_por_categoria = {item["categoria_principal__nombre"] or "Sin Categoría": item["total"] for item in categoria_stats}
+        
+        tickets_por_categoria = {
+            item["categoria_principal__nombre"] or "Sin Categoría": item["total"] 
+            for item in categoria_stats
+        }
 
         # =============================
         # EFECTIVIDAD GLOBAL
@@ -129,28 +168,30 @@ class AdminDashboardView(APIView):
             "tiempo_promedio_resolucion": round(tiempo_prom_resolucion_horas, 2),
             "efectividad_global": round(efectividad_global, 2),
         }
+        
+        return data
 
-        serializer = AdminDashboardMetricsSerializer(data)
-        return Response(serializer.data)
-
-    def get_tickets_in_range(self, rango):
-        """Función auxiliar para filtrar tickets por rango de fecha."""
+    @staticmethod
+    def get_tickets_in_range(base_queryset, rango):
+        """Aplicar filtro de rango sobre un queryset ya filtrado"""
         hoy = timezone.now()
         if rango == "dia":
-            return Ticket.objects.filter(fecha_creacion__date=hoy.date())
+            return base_queryset.filter(fecha_creacion__date=hoy.date())
         elif rango == "semana":
             inicio = hoy - timedelta(days=hoy.weekday())
-            return Ticket.objects.filter(fecha_creacion__gte=inicio)
+            return base_queryset.filter(fecha_creacion__gte=inicio)
         elif rango == "mes":
-            return Ticket.objects.filter(fecha_creacion__year=hoy.year, fecha_creacion__month=hoy.month)
+            return base_queryset.filter(
+                fecha_creacion__year=hoy.year, 
+                fecha_creacion__month=hoy.month
+            )
         elif rango == "anio":
-            return Ticket.objects.filter(fecha_creacion__year=hoy.year)
+            return base_queryset.filter(fecha_creacion__year=hoy.year)
         elif rango == "7dias":
-            return Ticket.objects.filter(fecha_creacion__gte=hoy - timedelta(days=7))
+            return base_queryset.filter(fecha_creacion__gte=hoy - timedelta(days=7))
         elif rango == "30dias":
-            return Ticket.objects.filter(fecha_creacion__gte=hoy - timedelta(days=30))
-        return Ticket.objects.all()
-
+            return base_queryset.filter(fecha_creacion__gte=hoy - timedelta(days=30))
+        return base_queryset
 
 # ============================================================
 #  VIEWSET PARA GESTIONAR AGENTES (CRUD)
@@ -160,21 +201,28 @@ class UserPagination(PageNumberPagination):
     page_size_query_param = 'page_size'
     max_page_size = 100
 
+class UserListWithRoleSerializer(AdminUserListSerializer):
+    role = RolAdminSerializer(source='rol', read_only=True)
+
+    class Meta(AdminUserListSerializer.Meta):
+        fields = list(getattr(AdminUserListSerializer.Meta, 'fields', [])) + ['role']
+
 class AgenteAdminViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, IsAdminRole]
     pagination_class = UserPagination
+    queryset = User.objects.select_related('rol').all()
 
     def get_queryset(self):
-        queryset = User.objects.all() # ✅ SOLUCIÓN: Mostrar todos los usuarios por defecto
+        queryset = super().get_queryset()
         return self.aplicar_filtros(queryset)
 
     def aplicar_filtros(self, queryset):
         request = self.request
         
         # 📋 FILTRO POR ROL
-        rol_id = request.query_params.get('rol')
+        rol_id = request.query_params.get('rol') or request.query_params.get('role')
         if rol_id:
-            queryset = queryset.filter(rol_id=rol_id)
+            queryset = queryset.filter(rol__id=rol_id)
         
         # 📋 FILTRO POR ESTADO
         estado = request.query_params.get('estado')
@@ -204,7 +252,8 @@ class AgenteAdminViewSet(viewsets.ModelViewSet):
         
         # 📊 ORDENAMIENTO
         orden = request.query_params.get('orden', '-date_joined')
-        campos_validos = ['username', 'email', 'first_name', 'last_name', 'rol', 'date_joined', 'last_login']
+        campos_validos = ['username', 'email', 'first_name', 'last_name', 
+                         'rol', 'date_joined', 'last_login']
         if orden.lstrip('-') in campos_validos:
             queryset = queryset.order_by(orden)
         
@@ -214,85 +263,38 @@ class AgenteAdminViewSet(viewsets.ModelViewSet):
         if self.action in ['create', 'update', 'partial_update']:
             return AdminAgentCreateUpdateSerializer
         elif self.action == 'list':
-            return AdminUserListSerializer
-        elif self.action == 'retrieve':
-            return AdminAgentCreateUpdateSerializer  # Para ver detalles
-        return super().get_serializer_class()
-
-    def list(self, request, *args, **kwargs):
-        """
-        Sobrescribir list para incluir metadata útil para React
-        """
-        queryset = self.filter_queryset(self.get_queryset())
-        page = self.paginate_queryset(queryset)
-        
-        if page is not None:
-            serializer = self.get_serializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
-
-    def get_paginated_response(self, data):
-        """
-        Respuesta paginada personalizada con metadata para React
-        """
-        paginator = self.paginator
-        return Response({
-            'pagination': {
-                'count': paginator.page.paginator.count,
-                'next': paginator.get_next_link(),
-                'previous': paginator.get_previous_link(),
-                'current_page': paginator.page.number,
-                'total_pages': paginator.page.paginator.num_pages,
-                'page_size': paginator.page_size
-            },
-            'results': data,
-            'filtros_aplicados': self.obtener_filtros_aplicados()
-        })
-
-    def obtener_filtros_aplicados(self):
-        """
-        Obtener metadata de los filtros aplicados
-        """
-        request = self.request
-        filtros = {}
-        
-        if request.query_params.get('rol'):
-            filtros['rol'] = request.query_params.get('rol')
-        if request.query_params.get('estado'):
-            filtros['estado'] = request.query_params.get('estado')
-        if request.query_params.get('search'):
-            filtros['search'] = request.query_params.get('search')
-        
-        return filtros
+            return UserListWithRoleSerializer
+        return AdminAgentCreateUpdateSerializer
 
     def create(self, request, *args, **kwargs):
-        # ✅ SOLUCIÓN: Crear una copia mutable de request.data
+        # ✅ CORRECCIÓN: Usar el servicio correctamente
         data = request.data.copy()
+        
+        # Convertir string vacío a None para evitar error de unicidad en numero_documento
+        if 'numero_documento' in data and data['numero_documento'] == '':
+            data['numero_documento'] = None
+            
+        # Convertir string vacío a None para evitar error de unicidad en codigo_empleado
+        if 'codigo_empleado' in data and data['codigo_empleado'] == '':
+            data['codigo_empleado'] = None
+            
         username = data.get('username', '').strip().lower()
         email = data.get('email', '').strip().lower()
-        data['username'] = username
-        data['email'] = email
         
+        # Validar duplicados ANTES de crear
         preventive_errors = UserValidationService.check_duplicate_user(username, email)
         if preventive_errors:
             raise serializers.ValidationError(preventive_errors)
         
-        serializer = self.get_serializer(data=data)
+        # Continuar con la creación...
+        data['username'] = username
+        data['email'] = email
         
-        # ✅ SOLUCIÓN: Añadir logging para depurar el error 400
-        try:
-            serializer.is_valid(raise_exception=True)
-        except serializers.ValidationError as e:
-            print("🚨 DEBUG: Error de validación al crear usuario.")
-            print("   - Datos recibidos:", data)
-            print("   - Errores del Serializer:", e.detail)
-            # Re-lanzamos la excepción para que DRF devuelva el 400
-            raise e
-            
+        serializer = self.get_serializer(data=data)
+        serializer.is_valid(raise_exception=True)
         user = serializer.save()
         
+        # Log de la acción
         SystemLog.objects.create(
             usuario=request.user,
             accion="CREATE",
@@ -312,15 +314,22 @@ class AgenteAdminViewSet(viewsets.ModelViewSet):
 
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
-        # ✅ SOLUCIÓN: Crear una copia mutable de request.data
         data = request.data.copy()
+        
+        # Convertir string vacío a None para evitar error de unicidad en numero_documento
+        if 'numero_documento' in data and data['numero_documento'] == '':
+            data['numero_documento'] = None
+
+        # Convertir string vacío a None para evitar error de unicidad en codigo_empleado
+        if 'codigo_empleado' in data and data['codigo_empleado'] == '':
+            data['codigo_empleado'] = None
+
         username = data.get('username', instance.username).strip().lower()
         email = data.get('email', instance.email).strip().lower()
-        data['username'] = username
-        data['email'] = email
         
+        # ✅ CORRECCIÓN: Usar el servicio con el ID del usuario actual
         preventive_errors = UserValidationService.check_duplicate_user(
-            username, email, instance.id
+            username, email, instance.id  # ← Pasar el ID para excluirlo
         )
         if preventive_errors:
             raise serializers.ValidationError(preventive_errors)
@@ -344,87 +353,6 @@ class AgenteAdminViewSet(viewsets.ModelViewSet):
             }
         )
 
-    def perform_destroy(self, instance):
-        SystemLog.objects.create(
-            usuario=self.request.user,
-            accion="DELETE",
-            descripcion=f"Usuario eliminado: {instance.username} ({instance.rol.nombre_visible if instance.rol else 'Sin rol'})",
-            ip=self.get_client_ip(self.request)
-        )
-        
-        if instance == self.request.user:
-            raise serializers.ValidationError("No puedes eliminar tu propio perfil de usuario.")
-        instance.delete()
-
-    def get_client_ip(self, request):
-        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-        if x_forwarded_for:
-            ip = x_forwarded_for.split(',')[0]
-        else:
-            ip = request.META.get('REMOTE_ADDR')
-        return ip
-
-    @action(detail=False, methods=['get'])
-    def opciones_filtro(self, request):
-        """
-        Devuelve opciones de filtro para los dropdowns en React
-        """
-        roles_con_count = User.objects.exclude(rol__tipo_base='solicitante').values('rol__id', 'rol__nombre_visible').annotate(
-            total=Count('id')
-        )
-        
-        total_activos = User.objects.exclude(rol__tipo_base='solicitante').filter(is_active=True).count()
-        total_inactivos = User.objects.exclude(rol__tipo_base='solicitante').filter(is_active=False).count()
-        
-        return Response({
-            'roles': [
-                {
-                    'value': item['rol__id'],
-                    'label': item['rol__nombre_visible'],
-                    'count': item['total']
-                }
-                for item in roles_con_count
-            ],
-            'estados': [
-                {'value': 'activo', 'label': 'Activo', 'count': total_activos},
-                {'value': 'inactivo', 'label': 'Inactivo', 'count': total_inactivos}
-            ],
-            'ordenamientos': [
-                {'value': '-date_joined', 'label': 'Más recientes primero'},
-                {'value': 'date_joined', 'label': 'Más antiguos primero'},
-                {'value': 'username', 'label': 'Usuario (A-Z)'},
-                {'value': '-username', 'label': 'Usuario (Z-A)'},
-                {'value': 'first_name', 'label': 'Nombre (A-Z)'},
-                {'value': '-first_name', 'label': 'Nombre (Z-A)'},
-            ]
-        })
-
-    @action(detail=False, methods=['get'])
-    def estadisticas_rapidas(self, request):
-        """Estadísticas generales de usuarios"""
-        total_usuarios = User.objects.exclude(rol__tipo_base='solicitante').count()
-        usuarios_activos = User.objects.exclude(rol__tipo_base='solicitante').filter(is_active=True).count()
-        
-        # Usuarios registrados en los últimos 7 días
-        ultima_semana = timezone.now() - timedelta(days=7)
-        nuevos_7dias = User.objects.exclude(rol__tipo_base='solicitante').filter(
-            date_joined__gte=ultima_semana
-        ).count()
-        
-        # Usuarios que nunca han iniciado sesión
-        nunca_login = User.objects.exclude(rol__tipo_base='solicitante').filter(
-            last_login__isnull=True
-        ).count()
-        
-        return Response({
-            'total_usuarios': total_usuarios,
-            'usuarios_activos': usuarios_activos,
-            'usuarios_inactivos': total_usuarios - usuarios_activos,
-            'nuevos_7dias': nuevos_7dias,
-            'nunca_login': nunca_login,
-            'porcentaje_activos': round((usuarios_activos / total_usuarios * 100) if total_usuarios > 0 else 0, 1)
-        })
-
     @action(detail=False, methods=['post'])
     def validar_usuario(self, request):
         """
@@ -434,6 +362,7 @@ class AgenteAdminViewSet(viewsets.ModelViewSet):
         email = request.data.get('email', '').strip().lower()
         user_id = request.data.get('user_id')  # Para actualizaciones
         
+        # ✅ Usar el servicio
         errors = UserValidationService.check_duplicate_user(
             username, email, user_id
         )
@@ -472,6 +401,7 @@ class AgenteAdminViewSet(viewsets.ModelViewSet):
         }
         
         if username:
+            # ✅ Usar el método específico del servicio
             result['username_available'] = UserValidationService.validate_username_availability(
                 username, user_id
             )
@@ -485,188 +415,172 @@ class AgenteAdminViewSet(viewsets.ModelViewSet):
             
         return Response(result)
 
-    @action(detail=False, methods=['post'])
-    def exportar_seleccion(self, request):
-        """
-        Exportar usuarios seleccionados (para checkboxes en React)
-        """
-        user_ids = request.data.get('user_ids', [])
-        formato = request.data.get('formato', 'excel')
-        
-        if not user_ids:
-            return Response(
-                {'error': 'No se seleccionaron usuarios para exportar'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        usuarios = User.objects.filter(id__in=user_ids)
-        
-        if formato == 'excel':
-            return self.exportar_excel(usuarios)
-        elif formato == 'pdf':
-            return self.exportar_pdf(usuarios)
-        else:
-            return Response(
-                {'error': 'Formato no válido. Use "excel" o "pdf"'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-    def exportar_excel(self, usuarios):
-        """Exportar a Excel (usando tu función existente pero adaptada)"""
-        from datetime import datetime
-        import openpyxl
-        from openpyxl.styles import Font, PatternFill, Alignment
-        
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = "Usuarios Exportados"
-        
-        # Estilos
-        header_font = Font(bold=True, color="FFFFFF")
-        header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
-        
-        # Encabezados optimizados para React
-        headers = ['ID', 'Usuario', 'Email', 'Nombre Completo', 'Rol', 'Estado', 'Fecha Registro']
-        
-        for col, header in enumerate(headers, 1):
-            cell = ws.cell(row=1, column=col, value=header)
-            cell.font = header_font
-            cell.fill = header_fill
-        
-        # Datos
-        for row, usuario in enumerate(usuarios, 2):
-            nombre_completo = f"{usuario.first_name or ''} {usuario.last_name or ''}".strip()
-            
-            data = [
-                usuario.id,
-                usuario.username,
-                usuario.email,
-                nombre_completo or usuario.username, # Corregido
-                usuario.rol.nombre_visible if usuario.rol else 'Sin rol',
-                'Activo' if usuario.is_active else 'Inactivo',
-                usuario.date_joined.strftime('%Y-%m-%d %H:%M') if usuario.date_joined else ''
-            ]
-            
-            for col, value in enumerate(data, 1):
-                ws.cell(row=row, column=col, value=value)
-        
-        # Ajustar columnas
-        for column in ws.columns:
-            max_length = 0
-            column_letter = column[0].column_letter
-            for cell in column:
-                try:
-                    if len(str(cell.value)) > max_length:
-                        max_length = len(str(cell.value))
-                except:
-                    pass
-            adjusted_width = min(max_length + 2, 30)
-            ws.column_dimensions[column_letter].width = adjusted_width
-        
-        response = HttpResponse(
-            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        )
-        filename = f"usuarios_exportados_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-        response['Content-Disposition'] = f'attachment; filename={filename}'
-        
-        wb.save(response)
-        return response
-
     @action(detail=True, methods=['post'])
     def toggle_activo(self, request, pk=None):
         """
-        Alternar estado activo/inactivo de un usuario (para toggle switches en React)
+        Acción para activar/desactivar un usuario rápidamente.
         """
-        usuario = self.get_object()
-        nuevo_estado = not usuario.is_active
-        usuario.is_active = nuevo_estado
-        usuario.save()
+        user = self.get_object()
         
-        # Log de la acción
+        if user == request.user:
+            return Response(
+                {'error': 'No puedes desactivar tu propio usuario.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        user.is_active = not user.is_active
+        user.save()
+        
+        estado = "activado" if user.is_active else "desactivado"
+        
         SystemLog.objects.create(
             usuario=request.user,
             accion="UPDATE",
-            descripcion=f"Estado de usuario {usuario.username} cambiado a {'Activo' if nuevo_estado else 'Inactivo'}",
+            descripcion=f"Usuario {user.username} ha sido {estado}.",
             ip=self.get_client_ip(request)
         )
         
         return Response({
-            'message': f'Usuario {"activado" if nuevo_estado else "desactivado"} exitosamente',
-            'nuevo_estado': nuevo_estado,
-            'usuario': AdminUserListSerializer(usuario).data
+            'message': f'Usuario {user.username} {estado} exitosamente',
+            'is_active': user.is_active
+        })
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        
+        if instance == request.user:
+            return Response(
+                {'error': 'No puedes eliminar tu propio perfil de usuario.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        SystemLog.objects.create(
+            usuario=request.user,
+            accion="DELETE",
+            descripcion=f"Usuario eliminado: {instance.username}",
+            ip=self.get_client_ip(request)
+        )
+        
+        return super().destroy(request, *args, **kwargs)
+
+    def get_client_ip(self, request):
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            ip = x_forwarded_for.split(',')[0]
+        else:
+            ip = request.META.get('REMOTE_ADDR')
+        return ip
+
+    @action(detail=False, methods=['get'])
+    def opciones_filtro(self, request):
+        roles_con_count = User.objects.exclude(
+            rol__tipo_base='solicitante'
+        ).values('rol__id', 'rol__nombre_visible').annotate(
+            total=Count('id')
+        )
+        
+        total_activos = User.objects.exclude(
+            rol__tipo_base='solicitante'
+        ).filter(is_active=True).count()
+        
+        total_inactivos = User.objects.exclude(
+            rol__tipo_base='solicitante'
+        ).filter(is_active=False).count()
+        
+        return Response({
+            'roles': [
+                {
+                    'value': item['rol__id'],
+                    'label': item['rol__nombre_visible'],
+                    'count': item['total']
+                }
+                for item in roles_con_count
+            ],
+            'estados': [
+                {'value': 'activo', 'label': 'Activo', 'count': total_activos},
+                {'value': 'inactivo', 'label': 'Inactivo', 'count': total_inactivos}
+            ]
+        })
+
+    @action(detail=False, methods=['get'])
+    def estadisticas_rapidas(self, request):
+        total_usuarios = User.objects.exclude(
+            rol__tipo_base='solicitante'
+        ).count()
+        
+        usuarios_activos = User.objects.exclude(
+            rol__tipo_base='solicitante'
+        ).filter(is_active=True).count()
+        
+        ultima_semana = timezone.now() - timedelta(days=7)
+        nuevos_7dias = User.objects.exclude(
+            rol__tipo_base='solicitante'
+        ).filter(date_joined__gte=ultima_semana).count()
+        
+        nunca_login = User.objects.exclude(
+            rol__tipo_base='solicitante'
+        ).filter(last_login__isnull=True).count()
+        
+        return Response({
+            'total_usuarios': total_usuarios,
+            'usuarios_activos': usuarios_activos,
+            'usuarios_inactivos': total_usuarios - usuarios_activos,
+            'nuevos_7dias': nuevos_7dias,
+            'nunca_login': nunca_login,
+            'porcentaje_activos': round(
+                (usuarios_activos / total_usuarios * 100) if total_usuarios > 0 else 0, 
+                1
+            )
         })
 
 class CategoryAdminViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet para gestionar categorías del sistema.
-    """
     permission_classes = [IsAuthenticated, IsAdminRole]
-    queryset = CategoriaPrincipal.objects.all() # Usar todos para poder ver y editar inactivos
-    pagination_class = None  # 👈 DESHABILITAR PAGINACIÓN PARA ESTA VISTA
+    queryset = CategoriaPrincipal.objects.all()
+    pagination_class = None
     serializer_class = CategoriaPrincipalSerializer
     
     def perform_create(self, serializer):
-        serializer.save()
-        # Log de creación
+        categoria = serializer.save()
         SystemLog.objects.create(
             usuario=self.request.user,
             accion="CREATE",
-            descripcion=f"Categoría creada: {serializer.validated_data['nombre']}",
-            ip=self.get_client_ip()
+            descripcion=f"Categoría creada: {categoria.nombre}",
+            ip=self.get_client_ip(self.request)
         )
     
     def perform_update(self, serializer):
-        serializer.save()
-        # Log de actualización
+        categoria = serializer.save()
         SystemLog.objects.create(
             usuario=self.request.user,
             accion="UPDATE",
-            descripcion=f"Categoría actualizada: {serializer.validated_data['nombre']}",
-            ip=self.get_client_ip()
+            descripcion=f"Categoría actualizada: {categoria.nombre}",
+            ip=self.get_client_ip(self.request)
         )
     
     def perform_destroy(self, instance):
         nombre = instance.nombre
         instance.delete()
-        # Log de eliminación
         SystemLog.objects.create(
             usuario=self.request.user,
             accion="DELETE",
             descripcion=f"Categoría eliminada: {nombre}",
-            ip=self.get_client_ip()
+            ip=self.get_client_ip(self.request)
         )
-    
-    def get_client_ip(self):
-        x_forwarded_for = self.request.META.get('HTTP_X_FORWARDED_FOR')
+
+    def get_client_ip(self, request):
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
         if x_forwarded_for:
             ip = x_forwarded_for.split(',')[0]
         else:
-            ip = self.request.META.get('REMOTE_ADDR')
+            ip = request.META.get('REMOTE_ADDR')
         return ip
 
 class RolAdminViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet para que el admin gestione los roles del sistema.
-    """
     permission_classes = [IsAuthenticated, IsAdminRole]
     queryset = Rol.objects.all()
-    serializer_class = RolAdminSerializer # ✅ Usar el serializer correcto
+    serializer_class = RolAdminSerializer
 
 class AreaAdminViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet para que el admin gestione las áreas/departamentos.
-    """
     permission_classes = [IsAuthenticated, IsAdminRole]
     queryset = Area.objects.all()
-    # Necesitaremos un AreaSerializer, lo crearemos en el siguiente paso.
-    # Por ahora, podemos usar un serializer genérico o crearlo.
     serializer_class = AreaSerializer
-
-class PriorityViewSet(viewsets.ReadOnlyModelViewSet):
-    """
-    ViewSet de solo lectura para obtener la lista de prioridades.
-    """
-    permission_classes = [IsAuthenticated, IsAdminRole]
-    queryset = Priority.objects.all().order_by('nivel')
-    serializer_class = PrioritySerializer
-    pagination_class = None # No paginar las prioridades

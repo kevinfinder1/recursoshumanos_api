@@ -437,7 +437,7 @@ class AdminTicketSerializer(serializers.ModelSerializer):
     solicitante_info = AdminUserMiniSerializer(source='solicitante', read_only=True)
     agente_info = AdminUserMiniSerializer(source='agente', read_only=True)
     categoria_principal = serializers.CharField(source="categoria_principal.nombre", read_only=True, allow_null=True)
-    prioridad_color = serializers.CharField(source="prioridad.color", read_only=True)
+    prioridad_color = serializers.SerializerMethodField()
     dias_abierto = serializers.IntegerField(read_only=True)  # Asumiendo que se anota en el queryset
 
     class Meta:
@@ -447,6 +447,19 @@ class AdminTicketSerializer(serializers.ModelSerializer):
             'solicitante_info', 'agente_info', 'categoria_principal', 'rating',
             'fecha_creacion', 'fecha_actualizacion', 'fecha_cierre', 'dias_abierto'
         ]
+
+    def get_prioridad_color(self, obj):
+        # Si es un objeto (ForeignKey)
+        if hasattr(obj, 'prioridad') and hasattr(obj.prioridad, 'color'):
+            return obj.prioridad.color
+        # Si es un string (CharField) - Caso más probable según utils_filters.py
+        if isinstance(obj.prioridad, str):
+            try:
+                p = Priority.objects.filter(nombre=obj.prioridad).first()
+                return p.color if p else "#808080"
+            except:
+                pass
+        return "#808080"
 
 
 class AdminTicketUpdateSerializer(serializers.ModelSerializer):
@@ -477,6 +490,12 @@ class AdminTicketUpdateSerializer(serializers.ModelSerializer):
             # Solo cambiamos el estado si no se está especificando uno diferente en la misma petición.
             if 'estado' not in validated_data and instance.estado == 'Pendiente':
                 validated_data['estado'] = 'En Proceso'
+
+        # ✅ CORRECCIÓN: Extraer nombre de la prioridad si el modelo usa CharField
+        if 'prioridad' in validated_data:
+            prio = validated_data['prioridad']
+            if hasattr(prio, 'nombre'):
+                validated_data['prioridad'] = prio.nombre
 
         # Llamar al método update original para guardar los cambios.
         instance = super().update(instance, validated_data)

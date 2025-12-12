@@ -48,6 +48,7 @@ const ChatMessages = ({ messages, setMessages, onImageClick, roomId }) => {
     const { user: currentUser } = useAuth();
 
     const loadMessages = useCallback(async (pageNum = 1, isInitial = false) => {
+        if (!roomId) return;
         if (loadingMore && !isInitial) return;
 
         setLoadingMore(true);
@@ -219,7 +220,7 @@ const ChatMessages = ({ messages, setMessages, onImageClick, roomId }) => {
             setMessageToDelete(null); // Cerrar el modal
         } catch (error) {
             console.error("Error al eliminar el mensaje:", error);
-            alert("No se pudo eliminar el mensaje: " + (error.response?.data?.detail || error.message));
+            alert("No se pudo eliminar el mensaje: " + (error.response?.data?.error || error.response?.data?.detail || error.message));
             setMessageToDelete(null); // Cerrar el modal también en caso de error
         } finally {
             setIsDeleting(false);
@@ -243,6 +244,14 @@ const ChatMessages = ({ messages, setMessages, onImageClick, roomId }) => {
     const MessageOptions = ({ msg }) => {
         if (msg.is_deleted && msg.message_type !== "file") return null;
 
+        // 🔹 Verificar si han pasado menos de 5 minutos
+        const canModify = () => {
+            const msgDate = new Date(msg.timestamp);
+            const now = new Date();
+            const diffMinutes = (now - msgDate) / (1000 * 60);
+            return diffMinutes <= 5;
+        };
+
         return (
             <div className="message-options-container">
                 <button
@@ -254,7 +263,7 @@ const ChatMessages = ({ messages, setMessages, onImageClick, roomId }) => {
 
                 {openMenuId === msg.id && (
                     <div className="message-options-dropdown">
-                        {isOwn(msg) && !msg.is_deleted && (
+                        {isOwn(msg) && !msg.is_deleted && canModify() && (
                             <>
                                 <button
                                     onClick={(e) => { e.stopPropagation(); handleEdit(msg); }}

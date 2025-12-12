@@ -1,17 +1,19 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import NotificationBell from "./NotificationBell";
 import { useNotificationsContext } from "../context/NotificationsContext";
 import NotificationPanel from "./NotificationPanel";
 import { Menu, X } from "lucide-react";
+import toast, { Toaster } from "react-hot-toast";
 import "./Navbar.css";
 
 const Navbar = () => {
     const [menuOpen, setMenuOpen] = useState(false);
     const [openNotifications, setOpenNotifications] = useState(false); // 1. Estado para el panel
     const { user, logout, isAuthenticated } = useAuth();
-    const { notifications } = useNotificationsContext();
+    const { notifications: rawNotifications, fetchNotifications, loading } = useNotificationsContext();
+    const notifications = Array.isArray(rawNotifications) ? rawNotifications : [];
     const navigate = useNavigate();
     const location = useLocation();
 
@@ -27,6 +29,129 @@ const Navbar = () => {
         setOpenNotifications((prev) => !prev);
     };
 
+    // 3. Lógica para Toasts de Chat en tiempo real
+    const prevNotificationsRef = useRef([]);
+    const hasLoadedRef = useRef(false);
+    const fetchNotifsRef = useRef(fetchNotifications);
+
+    useEffect(() => {
+        fetchNotifsRef.current = fetchNotifications;
+    }, [fetchNotifications]);
+
+    // 🔹 POLLING ROBUSTO: Usar setTimeout recursivo para asegurar ejecución continua
+    useEffect(() => {
+        let timeoutId;
+
+        const poll = async () => {
+            if (fetchNotifsRef.current) {
+                try {
+                    // console.log("🔄 Polling notificaciones..."); // Descomenta para depurar
+                    await fetchNotifsRef.current();
+                } catch (error) {
+                    console.error("Error polling notifications:", error);
+                }
+            }
+            // Programar la siguiente ejecución solo cuando la anterior termine
+            timeoutId = setTimeout(poll, 100);
+        };
+
+        poll(); // Iniciar ciclo
+
+        return () => clearTimeout(timeoutId);
+    }, []);
+
+    useEffect(() => {
+        // Evitar procesar si está cargando Y no tenemos datos previos (carga inicial real)
+        // Si ya tenemos datos y está refrescando en background (loading=true), permitimos comparar
+        if (loading && notifications.length === 0) return;
+
+        // Primera carga: Sincronizar ID sin notificar
+        if (!hasLoadedRef.current) {
+            // Solo marcar como cargado si realmente tenemos datos o si ya terminó de cargar
+            if (notifications.length > 0 || !loading) {
+                hasLoadedRef.current = true;
+                prevNotificationsRef.current = notifications;
+            }
+            return;
+        }
+
+        // Comparar lista actual con anterior para encontrar NUEVOS elementos
+        const prevIds = new Set(prevNotificationsRef.current.map(n => n.id));
+        const newItems = notifications.filter(n => !prevIds.has(n.id));
+
+        if (newItems.length > 0) {
+            // Evitar spam masivo si es una carga tardía (ej. más de 5 notificaciones de golpe)
+            if (prevNotificationsRef.current.length === 0 && newItems.length > 5) {
+                // Probablemente carga inicial tardía, ignorar
+            } else {
+                newItems.forEach(n => {
+                    // Detectar si es mensaje de chat (incluyendo el fix de group-hr)
+                    const tipo = n.tipo || "";
+                    const mensaje = n.mensaje || "";
+                    const isChat = (
+                        tipo === "chat_message" ||
+                        !!n.chat_room ||
+                        mensaje.includes("group-hr") ||
+                        mensaje.toLowerCase().includes("nuevo mensaje")
+                    );
+
+                    if (isChat && !n.leida) {
+                        // Verificar si ya estamos viendo esa sala para no molestar
+                        const params = new URLSearchParams(location.search);
+                        const currentRoom = params.get('roomId');
+
+                        let targetRoom = n.chat_room;
+                        if (!targetRoom && n.mensaje && n.mensaje.includes("group-hr")) {
+                            targetRoom = "group-hr";
+                        }
+
+                        // Si NO estamos en la sala del mensaje, mostrar Toast interactivo
+                        if (String(targetRoom) !== String(currentRoom)) {
+                            toast((t) => (
+                                <div
+                                    onClick={() => {
+                                        toast.dismiss(t.id);
+                                        const base = user?.role === "solicitante" ? "/usuario" : "/agente";
+                                        if (targetRoom) {
+                                            navigate(`${base}/chat?roomId=${targetRoom}`);
+                                        } else {
+                                            navigate(`${base}/chat`);
+                                        }
+                                    }}
+                                    style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '12px' }}
+                                >
+                                    <div style={{ fontSize: '24px' }}>💬</div>
+                                    <div>
+                                        <div style={{ fontWeight: '600', fontSize: '0.9rem', marginBottom: '2px' }}>
+                                            Nuevo mensaje
+                                        </div>
+                                        <div style={{ fontSize: '0.85rem', color: '#4b5563', lineHeight: '1.2' }}>
+                                            {(n.mensaje || "").length > 50 ? (n.mensaje || "").substring(0, 50) + '...' : (n.mensaje || "")}
+                                        </div>
+                                    </div>
+                                </div>
+                            ), {
+                                duration: 5000,
+                                position: 'top-right',
+                                style: {
+                                    background: '#ffffff',
+                                    borderLeft: '4px solid #2563eb',
+                                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                                    padding: '12px 16px',
+                                    borderRadius: '8px',
+                                    maxWidth: '350px'
+                                }
+                            });
+                        }
+                    }
+                });
+            }
+        }
+
+        // Actualizar referencia para la próxima comparación
+        prevNotificationsRef.current = notifications;
+    }, [notifications, loading, location.search, navigate, user]);
+
     // ✅ Asegurarse de que el usuario exista antes de verificar su rol
     const esAgente = user && (user.role === "admin" || user.role?.startsWith("agente"));
     const esUsuario = user && user.role === "solicitante";
@@ -38,6 +163,7 @@ const Navbar = () => {
 
     return (
         <>
+            <Toaster position="top-right" containerStyle={{ zIndex: 10000 }} />
             <nav className="modern-navbar-v2">
                 <div className="navbar-container-v2">
                     {/* 🏷️ LOGO / TÍTULO */}

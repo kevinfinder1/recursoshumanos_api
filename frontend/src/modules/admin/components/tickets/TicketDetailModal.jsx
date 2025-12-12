@@ -4,9 +4,6 @@ import { FaStar, FaExchangeAlt, FaTimes } from 'react-icons/fa';
 import './TicketDetailModal.css';
 
 const TicketDetailModal = ({ ticket, cargando, onCerrar, onCambiarEstado, onReasignar }) => {
-    // DEBUG: Imprimir el ticket que recibe el modal
-    console.log('Datos del ticket en el MODAL:', ticket);
-
     const getBadgeEstado = (estado) => {
         const estados = {
             'Abierto': { clase: 'estado-abierto', texto: 'Abierto' },

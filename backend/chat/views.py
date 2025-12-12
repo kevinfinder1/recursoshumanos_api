@@ -1,5 +1,6 @@
 # chat/views.py
 from django.shortcuts import get_object_or_404
+from datetime import timedelta
 from django.utils import timezone
 from rest_framework import generics, permissions, serializers
 from rest_framework.response import Response
@@ -214,6 +215,10 @@ class MessageDetailView(APIView):
         if message.sender != request.user:
             return Response({"error": "No tienes permiso para editar este mensaje."}, status=403)
 
+        # Validar tiempo límite de 5 minutos
+        if timezone.now() - message.timestamp > timedelta(minutes=5):
+            return Response({"error": "El tiempo para editar este mensaje ha expirado (5 minutos)."}, status=403)
+
         new_content = request.data.get("content", "").strip()
         if not new_content:
             return Response({"error": "El contenido no puede estar vacío."}, status=400)
@@ -232,6 +237,10 @@ class MessageDetailView(APIView):
         # Validar que el usuario es el autor
         if message.sender != request.user:
             return Response({"error": "No tienes permiso para eliminar este mensaje."}, status=403)
+
+        # Validar tiempo límite de 5 minutos
+        if timezone.now() - message.timestamp > timedelta(minutes=5):
+            return Response({"error": "El tiempo para eliminar este mensaje ha expirado (5 minutos)."}, status=403)
 
         message.is_deleted = True
         # Opcional: limpiar contenido para no guardar datos innecesarios

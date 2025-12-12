@@ -5,15 +5,14 @@ import sys
 import os
 
 # =============================================================================
-# SCHEDULER PARA DOCKER
-# Este script reemplaza al Programador de Tareas de Windows/Cron de Linux.
+# Este script reemplaza al Programador de Tareas de Windows
 # Mantiene un proceso vivo que ejecuta la rotación a las 00:01 AM.
 # =============================================================================
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 def run_rotaciones():
-    print(f"[{datetime.datetime.now()}] 🔄 Ejecutando proceso de rotación...")
+    print(f"[{datetime.datetime.now()}]  Ejecutando proceso de rotación...", flush=True)
     
     # Construir la ruta al manage.py
     manage_py = os.path.join(BASE_DIR, "manage.py")
@@ -26,19 +25,21 @@ def run_rotaciones():
             capture_output=True,
             text=True
         )
-        print(result.stdout)
+        print(result.stdout, flush=True)
         if result.stderr:
-            print("⚠️  Advertencias:", result.stderr)
+            print(" Advertencias:", result.stderr, flush=True)
             
     except subprocess.CalledProcessError as e:
-        print(f"❌ Error ejecutando rotaciones: {e}")
-        print("Salida de error:", e.stderr)
+        print(f" Error ejecutando rotaciones: {e}", flush=True)
+        print("Salida de error:", e.stderr, flush=True)
     except Exception as e:
-        print(f"❌ Error inesperado: {e}")
+        print(f" Error inesperado: {e}", flush=True)
 
 def main():
-    print("🚀 Scheduler de Rotaciones iniciado (Modo Docker)")
-    print("📅 Programado para ejecutarse diariamente a las 00:01 AM")
+    print(" Scheduler de Rotaciones iniciado (Modo Docker)", flush=True)
+    print(f" Hora del sistema detectada: {datetime.datetime.now()}", flush=True)
+    print(f" Zona Horaria (Timezone): {time.tzname}", flush=True)
+    print(" Programado para ejecutarse diariamente a las 00:01 AM", flush=True)
 
     while True:
         now = datetime.datetime.now()
@@ -50,7 +51,7 @@ def main():
             target += datetime.timedelta(days=1)
             
         seconds_wait = (target - now).total_seconds()
-        print(f"💤 Durmiendo {seconds_wait/3600:.2f} horas hasta la próxima ejecución ({target})...")
+        print(f"💤 Durmiendo {seconds_wait/3600:.2f} horas hasta la próxima ejecución ({target})...", flush=True)
         
         time.sleep(seconds_wait)
         run_rotaciones()

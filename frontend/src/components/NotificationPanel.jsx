@@ -64,6 +64,18 @@ const NotificationPanel = ({ open, onClose }) => {
         }
     };
 
+    // 🔹 Helper para identificar notificaciones de chat (incluyendo group-hr mal tipado)
+    const isChatNotification = (n) => {
+        const tipo = n.tipo || "";
+        const mensaje = n.mensaje || "";
+        return (
+            tipo === "chat_message" ||
+            !!n.chat_room ||
+            mensaje.includes("group-hr") ||
+            mensaje.toLowerCase().includes("nuevo mensaje")
+        );
+    };
+
     return (
         <div
             className="notification-panel-overlay"
@@ -135,7 +147,7 @@ const NotificationPanel = ({ open, onClose }) => {
                     {tab === "notifs" && (
                         <div>
                             {notifications
-                                .filter(n => n.tipo !== "chat_message")
+                                .filter(n => !isChatNotification(n))
                                 .map((n, idx) => {
                                     const key = n.id ?? `notif-${idx}`;
                                     const clickable = !!n.ticket && !!n.id;
@@ -210,16 +222,28 @@ const NotificationPanel = ({ open, onClose }) => {
                     {tab === "chats" && (
                         <div>
                             {notifications
-                                .filter(n => n.tipo === "chat_message")
+                                .filter(n => isChatNotification(n))
                                 .map((n, idx) => {
                                     const key = n.id ?? `chat-${idx}`;
                                     return (
                                         <div
                                             key={key}
-                                            className="chat-notification-item"
+                                            className={`chat-notification-item ${!n.leida ? "notification-item--unread" : ""}`}
                                             onClick={() => {
                                                 const base = user?.role === "solicitante" ? "/usuario" : "/agente";
-                                                navigate(`${base}/chat?ticket=${n.chat_room}`);
+
+                                                // 🔹 Detectar ID de sala (o forzar group-hr si es el caso)
+                                                let targetRoom = n.chat_room;
+                                                if (!targetRoom && n.mensaje && n.mensaje.includes("group-hr")) {
+                                                    targetRoom = "group-hr";
+                                                }
+
+                                                if (targetRoom) {
+                                                    navigate(`${base}/chat?roomId=${targetRoom}`);
+                                                } else {
+                                                    navigate(`${base}/chat`);
+                                                }
+                                                if (!n.leida) handleMarkRead(n.id);
                                                 onClose();
                                             }}
                                         >

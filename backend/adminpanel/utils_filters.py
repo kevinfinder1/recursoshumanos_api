@@ -1,94 +1,76 @@
-# filters.py
+# adminpanel/utils_filters.py
+from django.db.models import Q, F, ExpressionWrapper
+from django.db.models import DurationField
 from django.utils import timezone
-from datetime import datetime, timedelta
-from django.db.models import Q
+from datetime import timedelta
 from tickets.models import Ticket
+from .models import Priority
 
 def filtrar_tickets(request):
-    # ✅ SOLUCIÓN: Usar request.query_params en lugar de request.GET para vistas de API.
-    params = request.query_params
+    """
+    Filtro universal para tickets - USAR ESTA MISMA FUNCIÓN EN TODAS LAS VISTAS
+    """
+    queryset = Ticket.objects.all()
     
-    agente = params.get("agente")
-    estado = params.get("estado")
-    categoria = params.get("categoria")
-    subcategoria = params.get("subcategoria")
-    prioridad = params.get("prioridad")
-    rating = params.get("rating")
-    search = params.get("search")
-    orden = params.get("orden") # 
-    fecha_inicio = params.get("fecha_inicio")
-    fecha_fin = params.get("fecha_fin")
-    rango = params.get("rango")
-
-    hoy = timezone.now()
-    tickets = Ticket.objects.all()
-
-    # -------------------------
-    # FILTROS DIRECTOS
-    # -------------------------
-    if agente:
-        tickets = tickets.filter(agente_id=agente)
-
-    if estado:
-        tickets = tickets.filter(estado=estado)
-
-    if categoria:
-        tickets = tickets.filter(categoria_principal_id=categoria)
-
-    if subcategoria:
-        tickets = tickets.filter(subcategoria_id=subcategoria)
-
-    if prioridad:
-        tickets = tickets.filter(prioridad_id=prioridad) # Asumiendo que 'prioridad' es una FK a un modelo Priority
-
-    if rating:
-        tickets = tickets.filter(rating=rating)
-
-    # -------------------------
-    # BUSCADOR GLOBAL
-    # -------------------------
+    # 🔍 BÚSQUEDA
+    search = request.query_params.get('search')
     if search:
-        tickets = tickets.filter(
-            Q(titulo__icontains=search) |
-            Q(descripcion__icontains=search) |
-            Q(solicitante__username__icontains=search) |
-            Q(agente__username__icontains=search)
+        q_objects = Q(titulo__icontains=search) | \
+                    Q(descripcion__icontains=search) | \
+                    Q(solicitante__username__icontains=search) | \
+                    Q(agente__username__icontains=search)
+        
+        if search.isdigit():
+            q_objects |= Q(id=int(search))
+        
+        queryset = queryset.filter(q_objects)
+
+    # 📋 FILTROS BÁSICOS
+    estado = request.query_params.get('estado')
+    if estado:
+        queryset = queryset.filter(estado=estado)
+
+    categoria = request.query_params.get('categoria')
+    if categoria:
+        queryset = queryset.filter(categoria_principal_id=categoria)
+
+    prioridad = request.query_params.get('prioridad')
+    if prioridad:
+        if prioridad.isdigit():
+            try:
+                prioridad_obj = Priority.objects.get(id=prioridad)
+                queryset = queryset.filter(prioridad=prioridad_obj.nombre)
+            except Priority.DoesNotExist:
+                pass # Si no existe el ID, ignorar filtro o dejar queryset vacio (decisión: ignorar)
+        else:
+            queryset = queryset.filter(prioridad=prioridad)
+
+    agente = request.query_params.get('agente')
+    if agente:
+        queryset = queryset.filter(agente_id=agente)
+
+    # 📊 ORDENAMIENTO
+    orden = request.query_params.get('orden', '-fecha_creacion')
+    
+    if orden in ['dias_abierto', '-dias_abierto']:
+        # Calcular días abiertos
+        hoy = timezone.now()
+        queryset = queryset.annotate(
+            dias_abierto_annotated=ExpressionWrapper(
+                hoy - F('fecha_creacion'),
+                output_field=DurationField()
+            )
         )
-
-    # -------------------------
-    # RANGOS RÁPIDOS
-    # -------------------------
-    if rango == "dia":
-        tickets = tickets.filter(fecha_creacion__date=hoy.date())
-    elif rango == "semana":
-        inicio = hoy - timedelta(days=hoy.weekday())
-        tickets = tickets.filter(fecha_creacion__gte=inicio)
-    elif rango == "mes":
-        inicio = hoy.replace(day=1)
-        tickets = tickets.filter(fecha_creacion__gte=inicio)
-    elif rango == "anio":
-        inicio = hoy.replace(month=1, day=1)
-        tickets = tickets.filter(fecha_creacion__gte=inicio)
-    elif rango == "7dias":
-        tickets = tickets.filter(fecha_creacion__gte=hoy - timedelta(days=7))
-    elif rango == "30dias":
-        tickets = tickets.filter(fecha_creacion__gte=hoy - timedelta(days=30))
-
-    # -------------------------
-    # RANGO PERSONALIZADO
-    # -------------------------
-    if fecha_inicio:
-        fecha_i = datetime.strptime(fecha_inicio, "%Y-%m-%d")
-        tickets = tickets.filter(fecha_creacion__gte=fecha_i)
-
-    if fecha_fin:
-        fecha_f = datetime.strptime(fecha_fin, "%Y-%m-%d")
-        tickets = tickets.filter(fecha_creacion__lte=fecha_f)
-
-    # -------------------------
-    # ORDENAMIENTO
-    # -------------------------
-    if orden:
-        tickets = tickets.order_by(orden)
-
-    return tickets
+        if orden == 'dias_abierto':
+            queryset = queryset.order_by('dias_abierto_annotated')
+        else:
+            queryset = queryset.order_by('-dias_abierto_annotated')
+    elif orden:
+        # Para otros campos, ordenar directamente
+        campos_validos = ['fecha_creacion', '-fecha_creacion', 
+                         'fecha_cierre', '-fecha_cierre',
+                         'prioridad', '-prioridad', 'titulo', '-titulo']
+        if orden.lstrip('-') in campos_validos:
+            queryset = queryset.order_by(orden)
+    
+    return queryset

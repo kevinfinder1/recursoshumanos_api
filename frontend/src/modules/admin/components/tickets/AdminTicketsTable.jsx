@@ -17,9 +17,6 @@ const AdminTicketsTable = ({
         return <div className="tabla-vacia">No se encontraron tickets</div>;
     }
 
-    // DEBUG: Imprimir el primer ticket para ver su estructura
-    console.log('Datos del ticket en la TABLA:', tickets[0]);
-
     const getBadgeEstado = (estado) => {
         const estados = {
             'Abierto': { clase: 'estado-abierto', texto: 'Abierto' },

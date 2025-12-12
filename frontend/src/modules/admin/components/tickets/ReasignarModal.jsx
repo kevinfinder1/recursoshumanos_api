@@ -123,7 +123,7 @@ const ReasignarModal = ({ ticket, onReasignar, onCancelar, mensajeExito }) => {
                                     <option value="">Seleccionar agente...</option>
                                     {agentes.map((agente) => (
                                         <option key={agente.id} value={agente.id}>
-                                            {agente.username} ({agente.rol_display || agente.role})
+                                            {agente.username} ({agente.rol_display || (agente.role && typeof agente.role === 'object' ? agente.role.nombre_visible : agente.role) || 'Sin rol'})
                                             {agente.total_tickets_asignados !== undefined &&
                                                 ` - ${agente.total_tickets_asignados} tickets`
                                             }

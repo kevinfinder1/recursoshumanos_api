@@ -44,8 +44,8 @@ export const adminUsersApi = {
         const config = {
             headers: { 'Content-Type': undefined }
         };
-        // ✅ SOLUCIÓN: Usar PUT, que es el método correcto para actualizar un recurso completo.
-        const response = await API.put(`/admin/agentes/${id}/`, datosUsuario, config);
+        // ✅ SOLUCIÓN: Usar PATCH para permitir actualizaciones parciales.
+        const response = await API.patch(`/admin/agentes/${id}/`, datosUsuario, config);
         return response.data;
     },
 

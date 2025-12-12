@@ -18,6 +18,25 @@ const ChatSidebar = ({
 }) => {
     const { user } = useAuth();
     const [collapsedSections, setCollapsedSections] = useState({});
+    const [activeTab, setActiveTab] = useState('active'); // 'active' | 'history'
+
+    // 🔹 Lógica para separar chats Activos vs Resueltos
+    const activeChats = chats.filter(chat => {
+        if (chat.type === 'TICKET') {
+            // Mostrar si NO es Resuelto ni Cerrado
+            return !['Resuelto', 'Cerrado'].includes(chat.ticket_estado);
+        }
+        return true; // Chats directos y grupales siempre en activos
+    });
+
+    const historyChats = chats.filter(chat => {
+        if (chat.type === 'TICKET') {
+            return ['Resuelto', 'Cerrado'].includes(chat.ticket_estado);
+        }
+        return false;
+    });
+
+    const displayedChats = activeTab === 'active' ? activeChats : historyChats;
 
     const handleSelectAgent = async (agent) => {
         try {
@@ -198,25 +217,53 @@ const ChatSidebar = ({
 
                 {/* Lista de chats (incluye Chat Grupal para agentes) */}
                 <div className="chat-sidebar__section">
-                    <div className="chat-sidebar__section-header">
-                        <h3 className="chat-sidebar__section-title">
-                            {isAgent ? "Todos los Chats" : "Conversaciones"}
-                        </h3>
-                        <span className="chat-sidebar__count">
-                            {/* Solo contar chats dinámicos, no el chat grupal */}
-                            {chats.length}
-                        </span>
+                    {/* 🔹 Pestañas de Navegación (Activos vs Resueltos) */}
+                    <div style={{ display: 'flex', borderBottom: '1px solid #eee', marginBottom: '10px' }}>
+                        <button
+                            onClick={() => setActiveTab('active')}
+                            style={{
+                                flex: 1,
+                                padding: '10px',
+                                border: 'none',
+                                background: 'none',
+                                borderBottom: activeTab === 'active' ? '2px solid #2563eb' : '2px solid transparent',
+                                color: activeTab === 'active' ? '#2563eb' : '#6b7280',
+                                fontWeight: activeTab === 'active' ? '600' : '500',
+                                cursor: 'pointer',
+                                fontSize: '0.9rem'
+                            }}
+                        >
+                            Activos ({activeChats.length})
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('history')}
+                            style={{
+                                flex: 1,
+                                padding: '10px',
+                                border: 'none',
+                                background: 'none',
+                                borderBottom: activeTab === 'history' ? '2px solid #2563eb' : '2px solid transparent',
+                                color: activeTab === 'history' ? '#2563eb' : '#6b7280',
+                                fontWeight: activeTab === 'history' ? '600' : '500',
+                                cursor: 'pointer',
+                                fontSize: '0.9rem'
+                            }}
+                        >
+                            Resueltos ({historyChats.length})
+                        </button>
                     </div>
 
                     <div className="chat-list">
                         {/* Mensaje cuando no hay chats dinámicos */}
-                        {chats.length === 0 ? (
+                        {displayedChats.length === 0 ? (
                             <p className="chat-list__empty">
-                                {isAgent ? "No hay chats activos" : "No tienes conversaciones"}
+                                {activeTab === 'active'
+                                    ? (isAgent ? "No hay chats activos" : "No tienes conversaciones activas")
+                                    : "No hay tickets resueltos recientes"}
                             </p>
                         ) : (
                             /* Chats dinámicos */
-                            chats.map((chat) => {
+                            displayedChats.map((chat) => {
                                 const isSelected = selectedChat?.type === 'room' && selectedChat.data.id === chat.id;
 
                                 return (

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { useLocation } from "react-router-dom";
 import ChatSidebar from "./ChatSidebar";
 import ChatWindow from "./ChatWindow";
 import GroupChatWindow from "./GroupChatWindow";
@@ -9,6 +10,7 @@ import "./Chat.css";
 const ChatLayout = () => {
     const { user } = useAuth();
     const isAgent = user?.role === 'agente' || user?.role === 'admin';
+    const location = useLocation();
 
     const [selectedChat, setSelectedChat] = useState(null);
     const [chats, setChats] = useState([]);
@@ -33,7 +35,7 @@ const ChatLayout = () => {
                 allChats.unshift(groupChat);
             }
 
-            console.log("Final chats list:", allChats);
+            // console.log("Final chats list:", allChats); // Comentado para evitar spam en consola
             setChats(allChats);
         } catch (error) {
             console.error("Error cargando chats:", error);
@@ -62,14 +64,35 @@ const ChatLayout = () => {
         loadChats();
         loadAgents();
 
+        // 🔹 POLLING: Actualizar lista de chats cada 3 segundos para "tiempo real" en la lista
+        const interval = setInterval(() => {
+            loadChats();
+        }, 3000);
+
         const handleResize = () => {
             // La lógica de visibilidad ahora es manejada puramente por CSS
             // a través de las clases y media queries.
         };
 
         window.addEventListener('resize', handleResize);
-        return () => window.removeEventListener('resize', handleResize);
-    }, [loadChats, loadAgents]); // Se elimina selectedChat de las dependencias
+        return () => {
+            window.removeEventListener('resize', handleResize);
+            clearInterval(interval);
+        };
+    }, [loadChats, loadAgents]);
+
+    // 🔹 EFECTO: Seleccionar chat automáticamente si viene en la URL (?roomId=...)
+    useEffect(() => {
+        const searchParams = new URLSearchParams(location.search);
+        const roomId = searchParams.get("roomId");
+
+        if (roomId && chats.length > 0) {
+            const foundChat = chats.find(c => String(c.id) === String(roomId));
+            if (foundChat) {
+                setSelectedChat({ type: 'room', data: foundChat });
+            }
+        }
+    }, [location.search, chats]);
 
     const handleSelectChat = (chat) => {
         setSelectedChat(chat);

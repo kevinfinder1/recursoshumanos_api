@@ -44,8 +44,8 @@ const UsersTable = ({
                             <td>{usuario.nombre_completo}</td>
                             <td>{usuario.email}</td>
                             <td>
-                                <span className={`badge-rol rol-${usuario.role}`}>
-                                    {usuario.rol_display}
+                                <span className={`badge-rol rol-${(typeof usuario.role === 'string' ? usuario.role : usuario.role?.nombre_clave) || 'sin-rol'}`}>
+                                    {(typeof usuario.role === 'string' ? usuario.role : usuario.role?.nombre_visible) || 'Sin rol'}
                                 </span>
                             </td>
                             <td>

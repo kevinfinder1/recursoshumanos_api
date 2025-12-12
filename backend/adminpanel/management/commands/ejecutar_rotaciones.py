@@ -11,7 +11,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **kwargs):
         hoy = timezone.now().date()
-        self.stdout.write(f"🔄 Iniciando proceso de rotación para la fecha: {hoy}")
+        self.stdout.write(f" Iniciando proceso de rotación para la fecha: {hoy}")
 
         # Buscar rotaciones programadas para HOY (o antes) que no se hayan ejecutado
         rotaciones = RotacionProgramada.objects.filter(
@@ -20,7 +20,7 @@ class Command(BaseCommand):
         )
 
         if not rotaciones.exists():
-            self.stdout.write("✅ No hay rotaciones programadas para hoy.")
+            self.stdout.write(" No hay rotaciones programadas para hoy.")
             return
 
         for rotacion in rotaciones:
@@ -31,7 +31,7 @@ class Command(BaseCommand):
                     reemplazo = rotacion.agente_reemplazo
                     rol_anterior = agente.rol
 
-                    self.stdout.write(f"   👤 Procesando agente: {agente.username} ({rol_anterior} -> {nuevo_rol})")
+                    self.stdout.write(f"Procesando agente: {agente.username} ({rol_anterior} -> {nuevo_rol})")
 
                     # 1. CAMBIO DE ROL
                     agente.rol = nuevo_rol
@@ -78,9 +78,9 @@ class Command(BaseCommand):
                     rotacion.ejecutada = True
                     rotacion.save()
 
-                    self.stdout.write(self.style.SUCCESS(f"      ✅ Éxito: {agente.username} ahora es {nuevo_rol}. {msg_transferencia}"))
+                    self.stdout.write(self.style.SUCCESS(f"Éxito: {agente.username} ahora es {nuevo_rol}. {msg_transferencia}"))
 
             except Exception as e:
-                self.stdout.write(self.style.ERROR(f"      ❌ Error procesando a {rotacion.agente.username}: {str(e)}"))
+                self.stdout.write(self.style.ERROR(f"Error procesando a {rotacion.agente.username}: {str(e)}"))
 
-        self.stdout.write(self.style.SUCCESS("🏁 Proceso de rotación finalizado."))
+        self.stdout.write(self.style.SUCCESS("Proceso de rotación finalizado."))

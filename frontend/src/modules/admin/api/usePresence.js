@@ -13,7 +13,7 @@ const usePresence = () => {
             return;
         }
 
-        console.log('🔄 Presence: Starting WebSocket connection...');
+        console.log('Presence: Starting WebSocket connection...');
 
         try {
             // Construir la URL del WebSocket a partir de la variable de entorno de la API
@@ -24,13 +24,13 @@ const usePresence = () => {
             socket.current = new WebSocket(socketUrl);
 
             socket.current.onopen = () => {
-                console.log("🔌 Presence: Connected to presence channel");
+                console.log("Presence: Connected to presence channel");
             };
 
             socket.current.onmessage = (event) => {
                 try {
                     const data = JSON.parse(event.data);
-                    console.log('📨 Presence: Update received', data);
+                    console.log('Presence: Update received', data);
 
                     if (data.type === 'presence.update') {
                         const { user_id, status } = data.payload;
@@ -42,7 +42,7 @@ const usePresence = () => {
                             } else if (status === 'offline') {
                                 newUsers.delete(user_id);
                             }
-                            console.log('👥 Online users:', Array.from(newUsers));
+                            console.log('Online users:', Array.from(newUsers));
                             return newUsers;
                         });
                     }
@@ -61,20 +61,20 @@ const usePresence = () => {
                         });
                     }
                 } catch (error) {
-                    console.error('❌ Presence: Error parsing message', error);
+                    console.error('Presence: Error parsing message', error);
                 }
             };
 
             socket.current.onerror = (error) => {
-                console.error('❌ Presence: WebSocket error', error);
+                console.error('Presence: WebSocket error', error);
             };
 
             socket.current.onclose = (event) => {
-                console.log(`🔌 Presence: Disconnected (code: ${event.code}, reason: ${event.reason})`);
+                console.log(`Presence: Disconnected (code: ${event.code}, reason: ${event.reason})`);
             };
 
         } catch (error) {
-            console.error('❌ Presence: Failed to create WebSocket', error);
+            console.error('Presence: Failed to create WebSocket', error);
         }
 
         return () => {

@@ -3,8 +3,11 @@ import API from '../../../api/axiosInstance';
 
 export const adminReportsApi = {
     // Generar reporte Excel
+    // Generar reporte Excel
     generarReporteExcel: async (tipo, parametros = {}) => {
-        const response = await API.post(`/admin/reportes/${tipo}/excel/`, parametros, {
+        // Backend espera GET con query params, formato=xlsx y filtros
+        const response = await API.get(`/admin/reportes/${tipo}/`, {
+            params: { ...parametros, formato: 'xlsx' },
             responseType: 'blob'
         });
         return response.data;
@@ -12,7 +15,9 @@ export const adminReportsApi = {
 
     // Generar reporte PDF
     generarReportePDF: async (tipo, parametros = {}) => {
-        const response = await API.post(`/admin/reportes/${tipo}/pdf/`, parametros, {
+        // Backend espera GET con query params, formato=pdf y filtros
+        const response = await API.get(`/admin/reportes/${tipo}/`, {
+            params: { ...parametros, formato: 'pdf' },
             responseType: 'blob'
         });
         return response.data;
