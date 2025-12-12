@@ -1,7 +1,8 @@
-# chat/notification_utils.py
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.urls import reverse
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
 
 from notifications.models import Notification  # <- tu app
 from .models import Message
@@ -14,6 +15,8 @@ def create_notifications_for_message(message: Message):
     Crea notificaciones para todos los destinatarios correspondientes
     cuando se envía un mensaje de chat (room o group).
     """
+    channel_layer = get_channel_layer()
+
     # 1. Notificaciones de chat por ticket (room)
     if message.room and message.room.type == 'TICKET':
         room = message.room
@@ -32,13 +35,33 @@ def create_notifications_for_message(message: Message):
             preview = (message.content or "")[:60]
             body = f"{message.sender.username}: {preview}"
 
-        url = f"/tickets/{ticket.id}/chat"
+        # url = f"/tickets/{ticket.id}/chat"
 
         for user in recipients:
-            Notification.objects.create(
+            notif = Notification.objects.create(
                 usuario=user,
                 mensaje=f"Nuevo mensaje en Ticket #{ticket.id}: {body}",
                 tipo="chat_ticket", # Asegúrate que este tipo exista en tu modelo Notification
+                ticket=ticket
+            )
+
+            # ENVIAR WS
+            async_to_sync(channel_layer.group_send)(
+                f"user_{user.id}",
+                {
+                    "type": "send_notification",
+                    "content": {
+                        "channel": "chat_message",
+                        "message_id": message.id,
+                        "notification_id": notif.id,
+                        "sender_name": message.sender.username,
+                        "message": body,
+                        "room_id": room.id, # IMPORTANTE para redirigir
+                        "ticket_id": ticket.id,
+                        "created_at": str(message.timestamp),
+                        "tipo": "chat_message" # Para coincidir con useNotificationSocket
+                    }
+                }
             )
 
     # 2. Notificaciones de chat directo
@@ -54,13 +77,31 @@ def create_notifications_for_message(message: Message):
             preview = (message.content or "")[:60]
             body = f"{preview}"
 
-        url = f"/chat" # URL genérica para la página de chats
+        # url = f"/chat" # URL genérica para la página de chats
 
         for user in recipients:
-            Notification.objects.create(
+            notif = Notification.objects.create(
                 usuario=user,
                 mensaje=f"Nuevo mensaje de {message.sender.username}: {body}",
                 tipo="chat_directo", # Asegúrate que este tipo exista
+            )
+
+            # ENVIAR WS
+            async_to_sync(channel_layer.group_send)(
+                f"user_{user.id}",
+                {
+                    "type": "send_notification",
+                    "content": {
+                        "channel": "chat_message",
+                        "message_id": message.id,
+                        "notification_id": notif.id,
+                        "sender_name": message.sender.username,
+                        "message": body,
+                        "room_id": room.id, # IMPORTANTE para redirigir
+                        "created_at": str(message.timestamp),
+                        "tipo": "chat_message"
+                    }
+                }
             )
 
     # 3. Notificaciones de chat grupal (group)
@@ -83,11 +124,30 @@ def create_notifications_for_message(message: Message):
             preview = (message.content or "")[:60]
             body = f"{message.sender.username}: {preview}"
 
-        url = f"/chat-grupal/{group.name}"  # ajusta a la ruta de tu front
+        # url = f"/chat-grupal/{group.name}"  # ajusta a la ruta de tu front
 
         for user in recipients:
-            Notification.objects.create(
+            notif = Notification.objects.create(
                 usuario=user,
                 mensaje=f"Nuevo mensaje en {group.name}: {body}",
                 tipo="chat_group",
+            )
+
+            # ENVIAR WS
+            async_to_sync(channel_layer.group_send)(
+                f"user_{user.id}",
+                {
+                    "type": "send_notification",
+                    "content": {
+                        "channel": "chat_message",
+                        "message_id": message.id,
+                        "notification_id": notif.id,
+                        "sender_name": message.sender.username,
+                        "message": body,
+                        "room_id": group.name, # O lo que uses para identificar el grupo
+                        "is_group": True,
+                        "created_at": str(message.timestamp),
+                        "tipo": "chat_message"
+                    }
+                }
             )

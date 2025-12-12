@@ -10,7 +10,14 @@ export const useNotificationSocket = (onMessageCallback) => {
             return;
         }
 
-        const wsUrl = `ws://localhost:8000/ws/notificaciones/?token=${encodeURIComponent(
+        // 3. Determinar URL del WebSocket dinámicamente
+        const API_URL = import.meta.env.VITE_API_URL || "http://192.168.50.68:8000";
+        // Eliminar protocolo http/https para obtener solo host:port
+        const host = API_URL.replace(/^https?:\/\//, "");
+        // Determinar protocolo ws/wss
+        const protocol = API_URL.startsWith("https") ? "wss" : "ws";
+
+        const wsUrl = `${protocol}://${host}/ws/notificaciones/?token=${encodeURIComponent(
             token
         )}`;
 
